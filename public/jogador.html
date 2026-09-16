@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>C.R.I.S. - Ficha do Agente</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <script src="/socket.io/socket.io.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Roboto+Mono:wght@600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/jogador.css">
+</head>
+<body>
+
+  <!-- SELETOR -->
+  <div id="seletor-agente">
+    <div class="logo-cris-seletor">C.R.I.S.</div>
+    <div id="aviso-campanha" class="aviso-seletor">Iniciando motor de física 3D...</div>
+    <div class="grid-seletor" id="lista-escolha-agentes"></div>
+  </div>
+
+  <div class="ficha-wrapper">
+    <!-- CABEÇALHO -->
+    <header class="ficha-header-cris">
+      <div class="avatar-box" id="ficha-avatar"></div>
+      <div class="header-dados-grid">
+        <div class="header-linha">
+          <div class="campo-header"><span class="label-header">PERSONAGEM</span><span class="val-header" id="ficha-nome">...</span></div>
+          <div class="campo-header"><span class="label-header">JOGADOR</span><span class="val-header" id="ficha-jogador">...</span></div>
+        </div>
+        <div class="header-linha">
+          <div class="campo-header"><span class="label-header">ORIGEM</span><span class="val-header" id="ficha-origem">...</span></div>
+          <div class="campo-header"><span class="label-header">CLASSE</span><span class="val-header" id="ficha-classe">...</span></div>
+        </div>
+      </div>
+    </header>
+
+    <main class="ficha-grid-duas-colunas">
+      <!-- COLUNA ESQUERDA -->
+      <section class="coluna-tattica-esquerda">
+        <div class="sigilo-wrapper">
+          <svg class="sigilo-svg" viewBox="0 0 240 240">
+            <circle cx="120" cy="120" r="105" fill="none" stroke="#22222e" stroke-width="1.5"/>
+            <circle cx="120" cy="120" r="95" fill="none" stroke="#9333ea" stroke-width="1" stroke-dasharray="4,4" opacity="0.6"/>
+            <circle cx="120" cy="120" r="70" fill="none" stroke="#22222e" stroke-width="2"/>
+            <line x1="120" y1="40" x2="195" y2="95" stroke="#333344" stroke-width="1.5"/>
+            <line x1="195" y1="95" x2="168" y2="185" stroke="#333344" stroke-width="1.5"/>
+            <line x1="168" y1="185" x2="72" y2="185" stroke="#333344" stroke-width="1.5"/>
+            <line x1="72" y1="185" x2="45" y2="95" stroke="#333344" stroke-width="1.5"/>
+            <line x1="45" y1="95" x2="120" y2="40" stroke="#333344" stroke-width="1.5"/>
+          </svg>
+          <div class="sigilo-centro-label">ATRIBUTOS</div>
+          
+          <div class="no-atributo" id="attr-agi" onclick="rolarAtributo('Agilidade', agenteAtual.atributos.AGI)">
+            <span class="no-val" id="val-agi">0</span><span class="no-sub">AGILIDADE</span><span class="no-sigla">AGI</span>
+          </div>
+          <div class="no-atributo" id="attr-for" onclick="rolarAtributo('Força', agenteAtual.atributos.FOR)">
+            <span class="no-val" id="val-for">0</span><span class="no-sub">FORÇA</span><span class="no-sigla">FOR</span>
+          </div>
+          <div class="no-atributo" id="attr-int" onclick="rolarAtributo('Intelecto', agenteAtual.atributos.INT)">
+            <span class="no-val" id="val-int">0</span><span class="no-sub">INTELECTO</span><span class="no-sigla">INT</span>
+          </div>
+          <div class="no-atributo" id="attr-pre" onclick="rolarAtributo('Presença', agenteAtual.atributos.PRE)">
+            <span class="no-val" id="val-pre">0</span><span class="no-sub">PRESENÇA</span><span class="no-sigla">PRE</span>
+          </div>
+          <div class="no-atributo" id="attr-vig" onclick="rolarAtributo('Vigor', agenteAtual.atributos.VIG)">
+            <span class="no-val" id="val-vig">0</span><span class="no-sub">VIGOR</span><span class="no-sigla">VIG</span>
+          </div>
+        </div>
+
+        <div class="linha-stats-rapidos">
+          <div class="box-stat"><span class="box-stat-rotulo">NEX</span><strong class="box-stat-val" id="val-nex">5%</strong></div>
+          <div class="box-stat"><span class="box-stat-rotulo">PE / RODADA</span><strong class="box-stat-val" id="val-pe-rodada">1</strong></div>
+          <div class="box-stat"><span class="box-stat-rotulo">DESL</span><strong class="box-stat-val" id="val-desl">9m</strong></div>
+        </div>
+
+        <div class="secao-barras-cris">
+          <div class="grupo-barra-cris">
+            <span class="label-barra-cris">VIDA</span>
+            <div class="barra-controle-row barra-vida">
+              <div class="botoes-passo"><button class="btn-step-cris" onclick="alterarStatus('pv', -5)">«</button><button class="btn-step-cris" onclick="alterarStatus('pv', -1)">‹</button></div>
+              <div class="barra-valor-display" id="display-pv">0 / 0</div>
+              <div class="botoes-passo"><button class="btn-step-cris" onclick="alterarStatus('pv', 1)">›</button><button class="btn-step-cris" onclick="alterarStatus('pv', 5)">»</button></div>
+            </div>
+          </div>
+          <div class="grupo-barra-cris">
+            <span class="label-barra-cris">SANIDADE</span>
+            <div class="barra-controle-row barra-sanidade">
+              <div class="botoes-passo"><button class="btn-step-cris" onclick="alterarStatus('san', -5)">«</button><button class="btn-step-cris" onclick="alterarStatus('san', -1)">‹</button></div>
+              <div class="barra-valor-display" id="display-san">0 / 0</div>
+              <div class="botoes-passo"><button class="btn-step-cris" onclick="alterarStatus('san', 1)">›</button><button class="btn-step-cris" onclick="alterarStatus('san', 5)">»</button></div>
+            </div>
+          </div>
+          <div class="grupo-barra-cris">
+            <span class="label-barra-cris">ESFORÇO</span>
+            <div class="barra-controle-row barra-esforco">
+              <div class="botoes-passo"><button class="btn-step-cris" onclick="alterarStatus('pe', -5)">«</button><button class="btn-step-cris" onclick="alterarStatus('pe', -1)">‹</button></div>
+              <div class="barra-valor-display" id="display-pe">0 / 0</div>
+              <div class="botoes-passo"><button class="btn-step-cris" onclick="alterarStatus('pe', 1)">›</button><button class="btn-step-cris" onclick="alterarStatus('pe', 5)">»</button></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="secao-defesas-cris">
+          <div class="defesa-escudo-box">
+            <div class="escudo-emblema"><span id="val-defesa-total">10</span></div>
+            <div class="defesa-formula"><strong>DEFESA</strong><span>= 10 + AGI + <u id="val-defesa-equip">0</u></span></div>
+          </div>
+          <div class="defesa-reacoes">
+            <div class="reacao-item"><span>BLOQUEIO</span><strong id="val-bloqueio">0</strong></div>
+            <div class="reacao-item"><span>ESQUIVA</span><strong id="val-esquiva">0</strong></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- COLUNA DIREITA -->
+      <section class="coluna-conteudo-direita">
+        <nav class="abas-navegacao-direita">
+          <button class="tab-dir-btn ativa" onclick="mudarAbaDireita('pericias')">PERÍCIAS</button>
+          <button class="tab-dir-btn" onclick="mudarAbaDireita('inventario')">ITENS & ARMAS</button>
+          <button class="tab-dir-btn" onclick="mudarAbaDireita('habilidades')">HABILIDADES</button>
+        </nav>
+
+        <div id="painel-pericias" class="subpainel-direita ativo">
+          <table class="tabela-pericias-cris">
+            <thead>
+              <tr><th style="text-align:left;">PERÍCIA</th><th>DADOS</th><th>BÔNUS</th><th>Treino</th><th>Outros</th></tr>
+            </thead>
+            <tbody id="lista-pericias-tbody"></tbody>
+          </table>
+          <button id="btn-toggle-destreinadas" class="btn-toggle-pericias" onclick="toggleDestreinadas()">Mostrar Todas as Perícias</button>
+        </div>
+
+        <div id="painel-inventario" class="subpainel-direita">
+          <div class="subtabs-inventario">
+            <button class="subtab-inv ativa" onclick="filtrarInventario('todos')">Todos</button>
+            <button class="subtab-inv" onclick="filtrarInventario('armas')">Armas</button>
+            <button class="subtab-inv" onclick="filtrarInventario('equipamento')">Equipamentos</button>
+            <button class="subtab-inv" onclick="filtrarInventario('consumivel')">Consumíveis</button>
+          </div>
+          <div id="lista-itens-cris" class="lista-inventario-cards"></div>
+        </div>
+
+        <div id="painel-habilidades" class="subpainel-direita">
+          <div id="lista-habilidades-cris" class="lista-habilidades-cards"></div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- PALCO INVISÍVEL DOS DADOS -->
+  <div id="dice-canvas"></div>
+
+<!-- NOTIFICAÇÃO INFERIOR DIREITA ESTILO D&D BEYOND -->
+  <div id="toast-rolagem">
+    <div class="toast-titulo" id="toast-titulo">TESTE DE AGILIDADE</div>
+    <div class="toast-resultado" id="toast-texto">20</div>
+    <div class="toast-detalhe-txt" id="toast-detalhe-info">Dados: [15, 2] | Maior: 15 + Bônus: 5</div>
+  </div>
+
+  <!-- MODAL MATEMÁTICO (SÓ APARECE DEPOIS QUE O DADO SOME) -->
+  <div id="modal-dado" onclick="fecharModalDado()">
+    <div class="card-resultado-rolagem" onclick="event.stopPropagation()">
+      <div id="modal-teste-nome" class="modal-teste-titulo">TESTE</div>
+      <div id="modal-teste-total-calc" class="modal-teste-destaque-total"></div>
+      <div id="modal-teste-detalhes" class="modal-teste-subdetalhe"></div>
+      <button class="btn-fechar-dado" onclick="fecharModalDado()">Continuar</button>
+    </div>
+  </div>
+
+  <!-- SCRIPT DE FÍSICA QUE AGORA RODA DO SEU PC -->
+  <script type="module">
+    import DiceBox from "/dice-box/dice-box.es.min.js";
+    window.diceBox = new DiceBox("#dice-canvas", {
+      assetPath: "/dice-box/assets/",
+      theme: "default",
+      themeColor: "#b91c1c", 
+      textColor: "#ffffff",
+      scale: 8,
+      spinForce: 6,
+      throwForce: 6,
+      startingHeight: 10
+    });
+    window.diceBox.init().then(() => {
+      window.diceBoxReady = true;
+    }).catch(e => console.error(e));
+  </script>
+
+  <script src="/js/jogador.js"></script>
+</body>
+</html>
