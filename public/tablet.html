@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Mesa - Visão dos Jogadores</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="/socket.io/socket.io.js"></script>
+  <link rel="stylesheet" href="/css/tablet.css">
+</head>
+<body>
+
+  <div id="tela-standby">
+    <div id="standby-overlay">
+      <div class="simbolo-ritual"></div>
+      <div class="titulo-standby">Ordem Paranormal</div>
+      <div class="sub-standby">Transmissão em Espera</div>
+    </div>
+  </div>
+
+  <div id="cenario"></div>
+  <div id="vinheta"></div>
+
+  <div id="camada-mapa">
+    <div id="tabuleiro-wrapper">
+      <div id="tabuleiro-bg"></div>
+      <div id="tabuleiro-tokens"></div>
+    </div>
+  </div>
+
+  <div id="handout-modal">
+    <img id="handout-img" src="" alt="Pista Encontrada">
+  </div>
+
+  <script src="/js/tablet.js"></script>
+</body>
+</html>

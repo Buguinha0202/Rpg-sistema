@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>C.R.I.S. - Mesa Tática (TV)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="/socket.io/socket.io.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=Roboto+Mono:wght@700;900&display=swap" rel="stylesheet">
+
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; user-select: none; }
+    body, html { width: 100vw; height: 100vh; background: #000000; overflow: hidden; font-family: 'Inter', sans-serif; }
+    #tv-viewport { position: absolute; inset: 0; width: 100vw; height: 100vh; overflow: hidden; background: #050508; }
+    
+    #tv-mapa-container {
+      position: absolute;
+      top: 0; left: 0;
+      width: 1920px !important;
+      height: 1080px !important;
+      transform-origin: top left;
+    }
+    #tv-mapa-img { width: 100%; height: 100%; object-fit: contain; pointer-events: none; display: block; }
+
+    .vtt-ping-beacon { position: absolute; pointer-events: none; z-index: 1000; transform: translate(-50%, -50%); }
+    .vtt-ping-dot { width: 16px; height: 16px; border-radius: 50%; background-color: #ef4444; box-shadow: 0 0 16px #ef4444; position: absolute; top: -8px; left: -8px; }
+    .vtt-ping-ring { position: absolute; top: -40px; left: -40px; width: 80px; height: 80px; border-radius: 50%; border: 3px solid #ef4444; animation: vttPingAnim 1.4s cubic-bezier(0, 0.2, 0.8, 1) forwards; }
+    @keyframes vttPingAnim { 0% { transform: scale(0.2); opacity: 1; } 70% { opacity: 0.8; } 100% { transform: scale(2.8); opacity: 0; } }
+
+    #tv-standby-screen { position: fixed; inset: 0; z-index: 99999; background: #08080c; display: flex; align-items: center; justify-content: center; transition: opacity 0.5s ease; opacity: 1; pointer-events: auto; }
+    #tv-standby-img { width: 100%; height: 100%; object-fit: cover; display: none; }
+    #tv-standby-fallback { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+
+    #dice-canvas { position: fixed; inset: 0; pointer-events: none !important; z-index: 1000000; }
+    #dice-canvas canvas { pointer-events: none !important; }
+
+    #toast-rolagem { position: fixed; bottom: 2.5rem; right: 2.5rem; background: rgba(18, 18, 26, 0.95); border: 1px solid #2a2a38; border-left: 6px solid #b91c1c; border-radius: 10px; padding: 16px 28px; display: none; flex-direction: column; gap: 4px; box-shadow: 0 12px 40px rgba(0, 0, 0, 0.85); z-index: 1000001; pointer-events: none; }
+    #toast-rolagem.show { display: flex !important; }
+    .toast-titulo { font-size: 0.85rem; font-weight: 700; color: #9494a8; letter-spacing: 1px; }
+    .toast-resultado { font-size: 2.8rem; font-weight: 900; font-family: 'Roboto Mono', monospace; color: #ffffff; text-shadow: 0 0 18px rgba(239, 68, 68, 0.6); line-height: 1; margin: 4px 0; }
+    .toast-detalhe-txt { font-size: 0.8rem; color: #717182; }
+  </style>
+</head>
+<body>
+
+  <div id="tv-viewport">
+    <div id="tv-mapa-container">
+      <img id="tv-mapa-img" src="">
+      <canvas id="tv-draw-canvas" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 5;"></canvas>
+      <canvas id="tv-fog-canvas" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 15;"></canvas>
+      <div id="tv-camada-tokens" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 10; pointer-events: none;"></div>
+      <canvas id="tv-ruler-canvas" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 35;"></canvas>
+      <div id="tv-camada-pings" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 45; pointer-events: none;"></div>
+    </div>
+  </div>
+
+  <div id="tv-standby-screen">
+    <img id="tv-standby-img" src="">
+    <div id="tv-standby-fallback">
+      <h1 style="font-family: monospace; font-size: 3.5rem; color: #ef4444; letter-spacing: 8px; margin: 0; text-shadow: 0 0 20px rgba(239,68,68,0.5);">C.R.I.S.</h1>
+      <p style="color: #71717a; font-size: 1.1rem; letter-spacing: 3px; margin: 0; font-weight: bold;">SESSÃO EM ESPERA</p>
+    </div>
+  </div>
+
+<!-- TELA DE HANDOUT (PISTAS) -->
+  <div id="tv-handout-overlay" style="position: fixed; inset: 0; z-index: 9999999; background: rgba(0,0,0,0.85); display: none; align-items: center; justify-content: center; backdrop-filter: blur(10px);">
+    <img id="tv-handout-img" src="" style="max-width: 90%; max-height: 90%; object-fit: contain; border: 4px solid #9333ea; border-radius: 8px; box-shadow: 0 0 60px rgba(147, 51, 234, 0.7);">
+  </div>
+
+  <script>
+    // Coloque este trecho DENTRO da sua tag <script> existente no tv.html
+    socket.on('tv_mostrar_handout', (url) => {
+      const overlay = document.getElementById('tv-handout-overlay');
+      const img = document.getElementById('tv-handout-img');
+      img.src = url || 'https://images.unsplash.com/photo-1586861214040-5e3650201fc2?q=80&w=800'; // Fallback se a url estiver vazia
+      overlay.style.display = 'flex';
+    });
+
+    socket.on('tv_esconder_handout', () => {
+      document.getElementById('tv-handout-overlay').style.display = 'none';
+    });
+  </script>
+
+  <div id="dice-canvas"></div>
+  <!-- TELA DE HANDOUT (PISTAS) NA TV -->
+  <div id="tv-handout-overlay" style="position: fixed; inset: 0; z-index: 9999999; background: rgba(0,0,0,0.85); display: none; align-items: center; justify-content: center; backdrop-filter: blur(10px);">
+    <img id="beta-mapa-img" src="" style="width: 100%; height: 100%; object-fit: contain; pointer-events: none; opacity: 1;">
+  </div>
+  <style>
+    /* Estilo do Toast de Turno */
+    #toast-turno { 
+      position: fixed; 
+      top: 2.5rem; 
+      right: 2.5rem; 
+      background: rgba(18, 18, 26, 0.95); 
+      border: 1px solid #2a2a38; 
+      border-left: 6px solid #2563eb; /* Azul para diferenciar do dano */
+      border-radius: 10px; 
+      padding: 16px 28px; 
+      display: none; 
+      flex-direction: column; 
+      gap: 4px; 
+      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.85); 
+      z-index: 1000001; 
+      pointer-events: none; 
+    }
+    #toast-turno.show { display: flex !important; }
+  </style>
+
+  <div id="toast-turno">
+    <div class="toast-titulo" style="color: #60a5fa;">NOVO TURNO</div>
+    <div class="toast-resultado" id="toast-turno-nome" style="font-size: 2.2rem; color: #ffffff; text-shadow: 0 0 18px rgba(37, 99, 235, 0.6);">--</div>
+    <div class="toast-detalhe-txt" id="toast-turno-prox" style="color: #a1a1aa;">Próximo: --</div>
+  </div>
+  <div id="toast-rolagem">
+    <div class="toast-titulo" id="toast-titulo">ROLAGEM DO MESTRE</div>
+    <div class="toast-resultado" id="toast-texto">--</div>
+    <div class="toast-detalhe-txt" id="toast-detalhe-info"></div>
+  </div>
+
+  <!-- INICIALIZADOR ÚNICO DO DICE BOX NA TV -->
+  <script type="module">
+    import DiceBox from "/dice-box/dice-box.es.min.js";
+    window.diceBox = new DiceBox({
+      container: "#dice-canvas",
+      assetPath: "/dice-box/assets/",
+      theme: "default",
+      themeColor: "#b91c1c",
+      textColor: "#ffffff",
+      scale: 16,
+      spinForce: 6,
+      throwForce: 6,
+      startingHeight: 10
+    });
+    window.diceBox.init().then(() => {
+      window.diceBoxReady = true;
+    }).catch(e => console.error("Erro na física do dado TV:", e));
+  </script>
+
+  <script>
+    const socket = io({ transports: ['websocket'], upgrade: false });
+    const VTT_W = 1920;
+    const VTT_H = 1080;
+
+    function inicializarCanvas(id) {
+      const c = document.getElementById(id);
+      if (!c) return null;
+      if (c.width !== VTT_W || c.height !== VTT_H) { c.width = VTT_W; c.height = VTT_H; }
+      return c.getContext('2d');
+    }
+    inicializarCanvas('tv-draw-canvas'); inicializarCanvas('tv-fog-canvas'); inicializarCanvas('tv-ruler-canvas');
+
+    function aplicarEstadoStandby(emStandby, standbyImg) {
+      const standbyEl = document.getElementById('tv-standby-screen');
+      const imgEl = document.getElementById('tv-standby-img');
+      const fallbackEl = document.getElementById('tv-standby-fallback');
+      if (!standbyEl) return;
+      if (emStandby) {
+        if (standbyImg) { imgEl.src = standbyImg; imgEl.style.display = 'block'; fallbackEl.style.display = 'none'; }
+        else { imgEl.style.display = 'none'; fallbackEl.style.display = 'flex'; }
+        standbyEl.style.display = 'flex'; requestAnimationFrame(() => standbyEl.style.opacity = '1');
+      } else {
+        standbyEl.style.opacity = '0'; setTimeout(() => { if (standbyEl.style.opacity === '0') standbyEl.style.display = 'none'; }, 500);
+      }
+    }
+
+    socket.on('tv_sincronizar_inicial', (estado) => {
+      if (!estado) return;
+      if (estado.mapaAtivoUrl) { const mapaImg = document.getElementById('tv-mapa-img'); if (mapaImg) mapaImg.src = estado.mapaAtivoUrl; }
+      aplicarEstadoStandby(estado.emStandby, estado.standbyImg);
+    });
+
+    socket.on('tv_definir_standby', ({ emStandby, standbyImg, mapaAtivoUrl }) => {
+      if (mapaAtivoUrl) { const mapaImg = document.getElementById('tv-mapa-img'); if (mapaImg) mapaImg.src = mapaAtivoUrl; }
+      aplicarEstadoStandby(emStandby, standbyImg);
+    });
+
+    socket.emit('tv_solicitar_mapa_ativo');
+
+    socket.on('tv_trocar_mapa', (url) => {
+      const mapaImg = document.getElementById('tv-mapa-img');
+      if (mapaImg && url) mapaImg.src = url;
+    });
+
+    socket.on('tv_aplicar_camera', (camera) => {
+      const container = document.getElementById('tv-mapa-container');
+      if (container && camera) {
+        container.style.transition = 'transform 0.1s ease-out';
+        container.style.transform = `translate(${camera.x}px, ${camera.y}px) scale(${camera.zoom})`;
+      }
+    });
+
+    socket.on('tv_atualizar_tokens', (tokens) => {
+      const container = document.getElementById('tv-camada-tokens');
+      if (!container) return;
+      container.innerHTML = '';
+      (tokens || []).forEach(t => {
+        if (t.visivel === false) return;
+        const div = document.createElement('div');
+        div.id = 'tv-token-' + t.id;
+        div.style.position = 'absolute';
+        div.style.left = t.x + '%'; div.style.top = t.y + '%'; div.style.zIndex = '25';
+        const tamanho = 70 * (t.escala || 1);
+        div.style.width = tamanho + 'px'; div.style.height = tamanho + 'px';
+        div.style.transform = 'translate(-50%, -50%)'; div.style.userSelect = 'none'; div.style.pointerEvents = 'none';
+        div.style.transition = 'left 0.12s ease-out, top 0.12s ease-out';
+        if (t.img) { div.style.background = 'transparent'; div.innerHTML = `<img src="${t.img}" draggable="false" style="width:100%; height:100%; object-fit:contain; pointer-events:none;">`; }
+        else { div.style.background = '#333'; div.style.color = '#fff'; div.style.borderRadius = '50%'; div.style.display = 'flex'; div.style.alignItems = 'center'; div.style.justifyContent = 'center'; div.innerText = (t.nome || '').substring(0, 2); }
+        container.appendChild(div);
+      });
+    });
+
+    socket.on('tv_atualizar_fog', (dataUrl) => {
+      const ctx = inicializarCanvas('tv-fog-canvas');
+      if (!ctx) return;
+      ctx.globalCompositeOperation = 'source-over'; // Força o modo de pintura normal
+      if (!dataUrl) { ctx.clearRect(0, 0, VTT_W, VTT_H); return; } // Limpa a tela se o mapa novo não tiver névoa
+      const img = new Image(); 
+      img.onload = () => { 
+        ctx.clearRect(0, 0, VTT_W, VTT_H); 
+        ctx.drawImage(img, 0, 0, VTT_W, VTT_H); 
+      }; 
+      img.src = dataUrl;
+    }); 
+
+    // ==========================================
+    // NOTIFICAÇÃO DE TURNO NA TV
+    // ==========================================
+    let timerLimparTurnoTV = null;
+
+    socket.on('tv_atualizar_iniciativa', ({ combatentes, turnoIndex }) => {
+      if (!combatentes || combatentes.length === 0) return;
+
+      if (timerLimparTurnoTV) clearTimeout(timerLimparTurnoTV);
+
+      const toast = document.getElementById('toast-turno');
+      if (!toast) return;
+
+      // Reseta a animação
+      toast.classList.remove('show');
+
+      // Pega o jogador atual e calcula quem é o próximo da lista
+      const atual = combatentes[turnoIndex];
+      let proxIndex = turnoIndex + 1;
+      if (proxIndex >= combatentes.length) proxIndex = 0;
+      const proximo = combatentes.length > 1 ? combatentes[proxIndex].nome : 'Nenhum';
+
+      // Preenche os dados
+      document.getElementById('toast-turno-nome').innerText = atual.nome;
+      document.getElementById('toast-turno-prox').innerText = `Próximo: ${proximo}`;
+
+      // Força a re-renderização e mostra
+      void toast.offsetWidth; 
+      toast.classList.add('show');
+
+      // Some após 5 segundos
+      timerLimparTurnoTV = setTimeout(() => {
+        toast.classList.remove('show');
+      }, 5000); 
+    });
+
+    socket.on('tv_fog_cover_all', () => { const ctx = inicializarCanvas('tv-fog-canvas'); if (ctx) { ctx.globalCompositeOperation = 'source-over'; ctx.fillStyle = '#000000'; ctx.fillRect(0, 0, VTT_W, VTT_H); } });
+    socket.on('tv_fog_reveal_all', () => { const ctx = inicializarCanvas('tv-fog-canvas'); if (ctx) ctx.clearRect(0, 0, VTT_W, VTT_H); });
+    socket.on('tv_desenhar_fog', ({ x, y, isNovoTraco, modo, tamanho }) => {
+      const ctx = inicializarCanvas('tv-fog-canvas');
+      if (!ctx) return;
+      ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+      if (modo === 'eraser') { ctx.globalCompositeOperation = 'destination-out'; ctx.lineWidth = tamanho; } else { ctx.globalCompositeOperation = 'source-over'; ctx.strokeStyle = '#000000'; ctx.fillStyle = '#000000'; ctx.lineWidth = tamanho; }
+      if (isNovoTraco) { ctx.beginPath(); ctx.arc(x, y, tamanho / 2, 0, Math.PI * 2); ctx.fill(); ctx.beginPath(); ctx.moveTo(x, y); } else { ctx.lineTo(x, y); ctx.stroke(); }
+    });
+
+    socket.on('tv_desenhar_traco', ({ x, y, isNovoTraco, cor, modo, tamanho }) => {
+      const ctx = inicializarCanvas('tv-draw-canvas');
+      if (!ctx) return;
+      ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+      if (modo === 'eraser') { ctx.globalCompositeOperation = 'destination-out'; ctx.lineWidth = tamanho * 4; } else { ctx.globalCompositeOperation = 'source-over'; ctx.strokeStyle = cor; ctx.fillStyle = cor; ctx.lineWidth = tamanho; }
+      if (isNovoTraco) { ctx.beginPath(); ctx.arc(x, y, (modo === 'eraser' ? tamanho * 2 : tamanho / 2), 0, Math.PI * 2); ctx.fill(); ctx.beginPath(); ctx.moveTo(x, y); } else { ctx.lineTo(x, y); ctx.stroke(); }
+    });
+
+    socket.on('tv_atualizar_desenho', (dataUrl) => {
+      const ctx = inicializarCanvas('tv-draw-canvas');
+      if (!ctx) return;
+      ctx.globalCompositeOperation = 'source-over'; // Força o modo de pintura normal
+      if (!dataUrl) { ctx.clearRect(0, 0, VTT_W, VTT_H); return; } // Limpa a tela se o mapa novo não tiver desenho
+      const img = new Image(); 
+      img.onload = () => { 
+        ctx.clearRect(0, 0, VTT_W, VTT_H); 
+        ctx.drawImage(img, 0, 0, VTT_W, VTT_H); 
+      }; 
+      img.src = dataUrl;
+    });
+
+    socket.on('tv_limpar_desenho', () => { const ctx = inicializarCanvas('tv-draw-canvas'); if (ctx) ctx.clearRect(0, 0, VTT_W, VTT_H); });
+
+    socket.on('tv_atualizar_regua', ({ p1, p2, gradePx }) => {
+      const ctx = inicializarCanvas('tv-ruler-canvas');
+      if (!ctx) return;
+      ctx.clearRect(0, 0, VTT_W, VTT_H);
+      ctx.strokeStyle = '#38bdf8'; ctx.lineWidth = 4; ctx.setLineDash([10, 8]); ctx.beginPath(); ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y); ctx.stroke(); ctx.setLineDash([]);
+      const dx = p2.x - p1.x; const dy = p2.y - p1.y; const distPx = Math.sqrt(dx * dx + dy * dy); const metros = ((distPx / (gradePx || 70)) * 1.5).toFixed(1).replace('.0', '');
+      const midX = (p1.x + p2.x) / 2; const midY = (p1.y + p2.y) / 2;
+      ctx.fillStyle = '#0f172a'; ctx.strokeStyle = '#38bdf8'; ctx.lineWidth = 2; ctx.beginPath(); if (ctx.roundRect) ctx.roundRect(midX - 35, midY - 16, 70, 32, 6); else ctx.rect(midX - 35, midY - 16, 70, 32); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = '#ffffff'; ctx.font = 'bold 14px monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(`${metros}m`, midX, midY);
+    });
+
+    socket.on('tv_limpar_regua', () => { const ctx = inicializarCanvas('tv-ruler-canvas'); if (ctx) ctx.clearRect(0, 0, VTT_W, VTT_H); });
+
+    socket.on('tv_ping', ({ xPct, yPct, cor }) => {
+      const container = document.getElementById('tv-camada-pings');
+      if (!container) return;
+      const ping = document.createElement('div');
+      ping.className = 'vtt-ping-beacon'; ping.style.left = xPct + '%'; ping.style.top = yPct + '%';
+      ping.innerHTML = `<div class="vtt-ping-ring" style="border-color: ${cor};"></div><div class="vtt-ping-dot" style="background-color: ${cor}; box-shadow: 0 0 16px ${cor};"></div>`;
+      container.appendChild(ping); setTimeout(() => ping.remove(), 1500);
+    });
+
+    let timerLimparDadoTV = null;
+
+    socket.on('tv_rolar_dado_box', ({ valor, faces, autor, detalhes }) => {
+      if (timerLimparDadoTV) clearTimeout(timerLimparDadoTV);
+      
+      const toast = document.getElementById('toast-rolagem');
+      if (!toast) return;
+
+      toast.classList.remove('show');
+
+      const isCritico = faces === 20 && valor === 20; 
+      const isDesastre = faces === 20 && valor === 1;
+      
+      toast.style.borderLeftColor = isCritico ? '#22c55e' : isDesastre ? '#ef4444' : '#b91c1c';
+      document.getElementById('toast-titulo').innerText = `${(autor || 'MESTRE').toUpperCase()} ROLOU D${faces}`;
+      document.getElementById('toast-texto').innerText = valor;
+      document.getElementById('toast-texto').style.color = isCritico ? '#86efac' : isDesastre ? '#fca5a5' : '#ffffff';
+      
+      // Atualiza o subtítulo para mostrar se rolou com vantagem/desvantagem ou os críticos
+      let detalheTexto = detalhes || 'Resultado da mesa';
+      if (isCritico) detalheTexto = 'ACERTO CRÍTICO! ' + (detalhes ? `| ${detalhes}` : '');
+      if (isDesastre) detalheTexto = 'FALHA CRÍTICA! ' + (detalhes ? `| ${detalhes}` : '');
+      
+      document.getElementById('toast-detalhe-info').innerText = detalheTexto;
+      
+      void toast.offsetWidth;
+      toast.classList.add('show');
+
+      timerLimparDadoTV = setTimeout(() => { 
+        toast.classList.remove('show'); 
+      }, 6000);
+    });
+
+    socket.on('alerta_rolagem_mesa', ({ jogador, teste, total, detalhes }) => {
+      if (timerLimparDadoTV) clearTimeout(timerLimparDadoTV);
+      const toast = document.getElementById('toast-rolagem');
+      if (!toast) return;
+
+      toast.classList.remove('show');
+      toast.style.borderLeftColor = '#9333ea';
+      document.getElementById('toast-titulo').innerText = `${(jogador || 'AGENTE').toUpperCase()} — ${teste}`;
+      document.getElementById('toast-texto').innerText = total;
+      document.getElementById('toast-texto').style.color = '#ffffff';
+      document.getElementById('toast-detalhe-info').innerText = detalhes || 'Resultado da mesa';
+
+      void toast.offsetWidth;
+      toast.classList.add('show');
+
+      timerLimparDadoTV = setTimeout(() => {
+        toast.classList.remove('show');
+      }, 5000);
+    });
+
+    // ==========================================
+    // RECEBER PISTAS DO MESTRE
+    // ==========================================
+    socket.on('tv_mostrar_handout', (url) => {
+      const overlay = document.getElementById('tv-handout-overlay');
+      const img = document.getElementById('tv-handout-img');
+      img.src = url || 'https://images.unsplash.com/photo-1586861214040-5e3650201fc2?q=80&w=800'; // Usa uma imagem de fallback se der erro
+      overlay.style.display = 'flex';
+    });
+
+    socket.on('tv_esconder_handout', () => {
+      document.getElementById('tv-handout-overlay').style.display = 'none';
+    });
+ </script>
+</body>
+</html>
