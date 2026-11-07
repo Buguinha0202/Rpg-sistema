@@ -14,8 +14,19 @@ let cenaTransmitidaId = null;
 socket.on('sincronizar_estado_inicial', (estado) => {
   if (!estado) return;
   if (estado.campanhaAtivaId) vttCampanhaAtivaId = estado.campanhaAtivaId;
-  const btnPista = document.getElementById('btn-recolher-pista');
-  if (btnPista) btnPista.style.display = estado.pistaAbertaUrl ? 'block' : 'none';
+  if (estado.pistaAbertaUrl) {
+    atualizarUIHandoutVisivel(estado.pistaAbertaUrl);
+  } else {
+    atualizarUIHandoutOculto();
+  }
+});
+
+socket.on('tv_mostrar_handout', (url) => {
+  atualizarUIHandoutVisivel(url);
+});
+
+socket.on('tv_esconder_handout', () => {
+  atualizarUIHandoutOculto();
 });
 
 socket.on('sincronizar_ficha_atualizada', ({ campanhaId, personagem }) => {
@@ -85,6 +96,18 @@ async function persistirCampanhaNoServidor(camp) {
 }
 window.persistirCampanhaNoServidor = persistirCampanhaNoServidor;
 
+async function salvarCampanhasNoDisco() {
+  if (campanhaAtiva) {
+    try {
+      await persistirCampanhaNoServidor(campanhaAtiva);
+    } catch (err) {
+      console.error('Erro ao salvar campanha no disco:', err);
+    }
+  }
+}
+window.salvarCampanhasNoDisco = salvarCampanhasNoDisco;
+
+
 async function carregarCampanhas() {
   try {
     const res = await fetch('/api/campanhas?_t=' + Date.now()); 
@@ -132,6 +155,7 @@ function entrarNoCockpit(id) {
   if (tit) tit.innerText = campanhaAtiva.nome.toUpperCase();
   socket.emit('mestre_selecionou_campanha', campanhaAtiva.id);
   renderizarMonitoresAgentesCockpit();
+  renderizarCenariosCockpit();
   montarCombate();
   mudarAbaCockpit('agentes');
   mudarView('view-cockpit');
@@ -234,8 +258,8 @@ function mudarAbaCockpit(aba) {
   document.querySelectorAll('.cockpit-tab').forEach(b => b.classList.remove('ativa'));
   document.querySelectorAll('.subview-cockpit').forEach(s => s.classList.remove('ativa'));
   if (aba === 'agentes') { document.querySelectorAll('.cockpit-tab')[0].classList.add('ativa'); document.getElementById('aba-cockpit-agentes').classList.add('ativa'); }
-  else if (aba === 'cenarios') { document.querySelectorAll('.cockpit-tab')[1].classList.add('ativa'); document.getElementById('aba-cockpit-cenarios').classList.add('ativa'); }
-  else if (aba === 'ameacas') { document.querySelectorAll('.cockpit-tab')[2].classList.add('ativa'); document.getElementById('aba-cockpit-ameacas').classList.add('ativa'); }
+  else if (aba === 'cenarios') { document.querySelectorAll('.cockpit-tab')[1].classList.add('ativa'); document.getElementById('aba-cockpit-cenarios').classList.add('ativa'); renderizarCenariosCockpit(); }
+  else if (aba === 'ameacas') { document.querySelectorAll('.cockpit-tab')[2].classList.add('ativa'); document.getElementById('aba-cockpit-ameacas').classList.add('ativa'); renderizarBestiario(); }
 }
 window.mudarAbaCockpit = mudarAbaCockpit;
 
@@ -244,16 +268,94 @@ function renderizarMonitoresAgentesCockpit() {
   if (!grid) return;
   grid.innerHTML = '';
   const agentes = (campanhaAtiva && campanhaAtiva.personagens) ? campanhaAtiva.personagens : [];
-  if (agentes.length === 0) return grid.innerHTML = '<p style="color:#717182;">Nenhum agente.</p>';
+  if (agentes.length === 0) {
+    grid.innerHTML = '<p style="color:#717182; padding:20px; text-align:center;">Nenhum agente registrado nesta campanha.</p>';
+    return;
+  }
+
   agentes.forEach(ag => {
+    const avatar = ag.avatar || ag.img || 'https://via.placeholder.com/60?text=?';
+    const pvMax = ag.pvMax || ag.pv || 20;
+    const pvAtual = ag.pv !== undefined ? ag.pv : pvMax;
+    const pctPv = Math.min(100, Math.max(0, (pvAtual / (pvMax || 1)) * 100));
+
+    const sanMax = ag.sanMax || ag.san || 20;
+    const sanAtual = ag.san !== undefined ? ag.san : sanMax;
+    const pctSan = Math.min(100, Math.max(0, (sanAtual / (sanMax || 1)) * 100));
+
+    const peMax = ag.peMax || ag.pe || 5;
+    const peAtual = ag.pe !== undefined ? ag.pe : peMax;
+    const pctPe = Math.min(100, Math.max(0, (peAtual / (peMax || 1)) * 100));
+
+    const estaMorrendo = pvAtual <= 0;
+    const estaEnlouquecendo = sanAtual <= 0;
+
     const card = document.createElement('div');
-    card.className = 'card-monitor-agente';
+    card.className = 'card-monitor-agente' + (estaMorrendo ? ' status-morrendo' : (estaEnlouquecendo ? ' status-enlouquecendo' : ''));
     card.innerHTML = `
-      <div class="monitor-top"><div class="monitor-avatar" style="background-image:url('${ag.img || ''}')"></div><div><div class="monitor-info-nome">${ag.nome}</div></div></div>
-      <div class="monitor-barras-grupo" style="margin-top: 10px;">
-        <div style="display:flex; justify-content:space-between;"><span>PV</span><div class="solid-bar vida" style="width:75%;">${ag.pv}/${ag.pvMax}</div></div>
-        <div style="display:flex; justify-content:space-between;"><span>SAN</span><div class="solid-bar sanidade" style="width:75%;">${ag.san}/${ag.sanMax}</div></div>
-      </div>`;
+      <div class="monitor-top" style="display:flex; justify-content:space-between; align-items:center;">
+        <div style="display:flex; gap:12px; align-items:center;">
+          <div class="monitor-avatar" style="background-image:url('${avatar}')"></div>
+          <div>
+            <div class="monitor-info-nome">${ag.nome}</div>
+            <div class="monitor-info-detalhe">${ag.origem || ag.classe || 'Agente'} • NEX ${ag.nex || '5%'}</div>
+          </div>
+        </div>
+        <div>
+          ${estaMorrendo ? '<span style="font-size:0.65rem; background:#dc2626; color:#fff; padding:3px 6px; border-radius:4px; font-weight:bold;">💀 MORRENDO</span>' : ''}
+          ${(!estaMorrendo && estaEnlouquecendo) ? '<span style="font-size:0.65rem; background:#7c3aed; color:#fff; padding:3px 6px; border-radius:4px; font-weight:bold;">🌀 INSANO</span>' : ''}
+        </div>
+      </div>
+
+      <div class="monitor-atributos-linha">
+        <div class="attr-col-item"><span>AGI</span><strong>${ag.atributos?.AGI || 1}</strong></div>
+        <div class="attr-col-item"><span>FOR</span><strong>${ag.atributos?.FOR || 1}</strong></div>
+        <div class="attr-col-item"><span>INT</span><strong>${ag.atributos?.INT || 1}</strong></div>
+        <div class="attr-col-item"><span>PRE</span><strong>${ag.atributos?.PRE || 1}</strong></div>
+        <div class="attr-col-item"><span>VIG</span><strong>${ag.atributos?.VIG || 1}</strong></div>
+      </div>
+
+      <div class="monitor-barras-grupo">
+        <!-- VIDA -->
+        <div class="monitor-bar-wrapper">
+          <span class="monitor-bar-rotulo" style="color:#f87171;">PV</span>
+          <button class="monitor-btn-step step-cinco" onclick="ajustarStatusAgenteMestre('${ag.id}', 'pv', -5)" title="-5 PV">-5</button>
+          <button class="monitor-btn-step" onclick="ajustarStatusAgenteMestre('${ag.id}', 'pv', -1)" title="-1 PV">-1</button>
+          <div class="monitor-bar-trilho">
+            <div class="monitor-bar-preenchimento pv" style="width:${pctPv}%;"></div>
+            <span class="monitor-bar-texto">${pvAtual} / ${pvMax}</span>
+          </div>
+          <button class="monitor-btn-step" onclick="ajustarStatusAgenteMestre('${ag.id}', 'pv', 1)" title="+1 PV">+1</button>
+          <button class="monitor-btn-step step-cinco" onclick="ajustarStatusAgenteMestre('${ag.id}', 'pv', 5)" title="+5 PV">+5</button>
+        </div>
+
+        <!-- SANIDADE -->
+        <div class="monitor-bar-wrapper">
+          <span class="monitor-bar-rotulo" style="color:#c084fc;">SAN</span>
+          <button class="monitor-btn-step step-cinco" onclick="ajustarStatusAgenteMestre('${ag.id}', 'san', -5)" title="-5 SAN">-5</button>
+          <button class="monitor-btn-step" onclick="ajustarStatusAgenteMestre('${ag.id}', 'san', -1)" title="-1 SAN">-1</button>
+          <div class="monitor-bar-trilho">
+            <div class="monitor-bar-preenchimento san" style="width:${pctSan}%;"></div>
+            <span class="monitor-bar-texto">${sanAtual} / ${sanMax}</span>
+          </div>
+          <button class="monitor-btn-step" onclick="ajustarStatusAgenteMestre('${ag.id}', 'san', 1)" title="+1 SAN">+1</button>
+          <button class="monitor-btn-step step-cinco" onclick="ajustarStatusAgenteMestre('${ag.id}', 'san', 5)" title="+5 SAN">+5</button>
+        </div>
+
+        <!-- ESFORÇO -->
+        <div class="monitor-bar-wrapper">
+          <span class="monitor-bar-rotulo" style="color:#fb923c;">PE</span>
+          <button class="monitor-btn-step step-cinco" onclick="ajustarStatusAgenteMestre('${ag.id}', 'pe', -5)" title="-5 PE">-5</button>
+          <button class="monitor-btn-step" onclick="ajustarStatusAgenteMestre('${ag.id}', 'pe', -1)" title="-1 PE">-1</button>
+          <div class="monitor-bar-trilho">
+            <div class="monitor-bar-preenchimento pe" style="width:${pctPe}%;"></div>
+            <span class="monitor-bar-texto">${peAtual} / ${peMax}</span>
+          </div>
+          <button class="monitor-btn-step" onclick="ajustarStatusAgenteMestre('${ag.id}', 'pe', 1)" title="+1 PE">+1</button>
+          <button class="monitor-btn-step step-cinco" onclick="ajustarStatusAgenteMestre('${ag.id}', 'pe', 5)" title="+5 PE">+5</button>
+        </div>
+      </div>
+    `;
     grid.appendChild(card);
   });
 }
@@ -281,7 +383,7 @@ var catalogoAtivo = 'jogadores';
 var ferramentaAtiva = 'select';
 var topDropdownAtivo = null;
 var popoverInferiorAtivo = null;
-var isTransmitindoLive = false;
+var isTransmitindoLive = true;
 
 var tMousedownX = 0;
 var tMousedownY = 0;
@@ -308,7 +410,20 @@ function atualizarCamera(deveSalvar = false) {
 }
 window.atualizarCamera = atualizarCamera;
 
-function ajustarZoomManual(delta) { vttState.camera.zoom = Math.max(0.5, Math.min(4, vttState.camera.zoom + delta)); atualizarCamera(true); }
+function ajustarZoomManual(delta) {
+  const viewport = document.getElementById('beta-viewport');
+  const vpW = viewport ? viewport.offsetWidth : window.innerWidth;
+  const vpH = viewport ? viewport.offsetHeight : window.innerHeight;
+  const mx = vpW / 2;
+  const my = vpH / 2;
+  const zoomOld = vttState.camera.zoom;
+  const zoomNew = Math.max(0.35, Math.min(5.0, zoomOld + delta));
+  if (Math.abs(zoomNew - zoomOld) < 0.001) return;
+  vttState.camera.x = mx - (mx - vttState.camera.x) * (zoomNew / zoomOld);
+  vttState.camera.y = my - (my - vttState.camera.y) * (zoomNew / zoomOld);
+  vttState.camera.zoom = zoomNew;
+  atualizarCamera(true);
+}
 window.ajustarZoomManual = ajustarZoomManual;
 function resetarZoomManual() { vttState.camera.zoom = 1; atualizarCamera(true); }
 window.resetarZoomManual = resetarZoomManual;
@@ -388,11 +503,26 @@ function carregarEstadoTabuleiro(c) {
         if (labelNome) labelNome.innerText = mapaAtual.nome;
       }
       desenharTokensBetaNoMestre();
+      desenharPinsNoVTT();
       restaurarFogSalvo(vttState.fogData);
       restaurarDrawSalvo(vttState.drawData);
+      if (isTransmitindoLive && typeof socket !== 'undefined' && vttState.mapaAtivoUrl) {
+        socket.emit('tv_definir_standby', { emStandby: false, mapaAtivoUrl: vttState.mapaAtivoUrl });
+        socket.emit('tv_trocar_mapa', vttState.mapaAtivoUrl);
+        socket.emit('tv_atualizar_tokens', vttState.tokens || []);
+        if (vttState.fogData) socket.emit('tv_atualizar_fog', vttState.fogData);
+        if (vttState.drawData) socket.emit('tv_atualizar_desenho', vttState.drawData);
+        socket.emit('tv_aplicar_camera', vttState.camera);
+      }
     } else {
       atualizarCamera(false);
       desenharTokensBetaNoMestre();
+      if (isTransmitindoLive && typeof socket !== 'undefined' && vttState.mapaAtivoUrl) {
+        socket.emit('tv_definir_standby', { emStandby: false, mapaAtivoUrl: vttState.mapaAtivoUrl });
+        socket.emit('tv_trocar_mapa', vttState.mapaAtivoUrl);
+        socket.emit('tv_atualizar_tokens', vttState.tokens || []);
+        socket.emit('tv_aplicar_camera', vttState.camera);
+      }
     }
   }
 }
@@ -431,6 +561,7 @@ function aplicarMapaNaMesa(mapaIdOuUrl) {
   if (labelNome) labelNome.innerText = novoMapa.nome;
 
   desenharTokensBetaNoMestre();
+  desenharPinsNoVTT();
   restaurarFogSalvo(vttState.fogData);
   restaurarDrawSalvo(vttState.drawData);
 
@@ -449,6 +580,13 @@ window.aplicarMapaNaMesa = aplicarMapaNaMesa;
 
 function abrirModoTabuleiro() {
   const modalTab = document.getElementById('modal-tabuleiro');
+  isTransmitindoLive = true;
+  const btn = document.getElementById('btn-toggle-display');
+  const label = document.getElementById('display-map-label');
+  const icon = document.getElementById('display-map-icon');
+  if (btn) btn.classList.add('live-active');
+  if (label) label.innerText = 'Transmitindo (Pausar)';
+  if (icon) icon.innerText = '⏹';
   if (!modalTab) return;
   modalTab.style.display = 'block';
   fecharTopMenus();
@@ -598,11 +736,18 @@ function mudarAbaCatalogo(aba) {
   catalogoAtivo = aba; 
   const tJog = document.getElementById('tab-cat-jogadores');
   const tMon = document.getElementById('tab-cat-monstros');
-  if (tJog && tMon) {
+  const tEvi = document.getElementById('tab-cat-evidencias');
+  if (tJog) {
     tJog.style.borderBottomColor = aba === 'jogadores' ? 'var(--vtt-active-red)' : 'transparent';
-    tJog.style.color = aba === 'jogadores' ? 'var(--text-main)' : 'var(--vtt-text-muted)';
+    tJog.style.color = aba === 'jogadores' ? 'var(--vtt-text-main)' : 'var(--vtt-text-muted)';
+  }
+  if (tMon) {
     tMon.style.borderBottomColor = aba === 'monstros' ? 'var(--vtt-active-red)' : 'transparent';
-    tMon.style.color = aba === 'monstros' ? 'var(--text-main)' : 'var(--vtt-text-muted)';
+    tMon.style.color = aba === 'monstros' ? 'var(--vtt-text-main)' : 'var(--vtt-text-muted)';
+  }
+  if (tEvi) {
+    tEvi.style.borderBottomColor = aba === 'evidencias' ? 'var(--vtt-gold)' : 'transparent';
+    tEvi.style.color = aba === 'evidencias' ? 'var(--vtt-gold)' : 'var(--vtt-text-muted)';
   }
   renderizarCatalogo(); 
 }
@@ -651,6 +796,45 @@ function renderizarCatalogo() {
   const lista = document.getElementById('lista-catalogo');
   if (!lista) return;
   lista.innerHTML = '';
+  if (catalogoAtivo === 'evidencias') {
+    const pins = obterPinsDoMapaAtual();
+    if (!pins || pins.length === 0) {
+      lista.innerHTML = '<p style="color:#717182; font-size:0.85rem; padding:15px; text-align:center;">Nenhuma evidência registrada nesta cena.</p>';
+      return;
+    }
+    if (imagemAtivaNaTV) {
+      const banner = document.createElement('div');
+      banner.style = "margin-bottom:10px;";
+      banner.innerHTML = `<button onclick="fecharPistaNaTV(); renderizarCatalogo();" style="width:100%; background:#dc2626; color:#fff; border:1px solid #ef4444; border-radius:6px; padding:8px; font-weight:bold; font-size:0.8rem; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:6px; box-shadow:0 0 10px rgba(220,38,38,0.5);"><span>✕</span> Ocultar Imagem da TV</button>`;
+      lista.appendChild(banner);
+    }
+    pins.forEach(pin => {
+      const isProjetada = (imagemAtivaNaTV && pin.imagem && imagemAtivaNaTV === pin.imagem);
+      const div = document.createElement('div');
+      div.className = 'item-catalogo-evidencia';
+      div.style = "display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.07); padding:8px 10px; border-radius:6px;";
+      div.innerHTML = `
+        <div style="display:flex; align-items:center; gap:12px; max-width:60%;">
+          <div style="width:40px; height:40px; border-radius:4px; overflow:hidden; background:#0f0f16; border:1px solid rgba(234,179,8,0.4); display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+            ${pin.imagem ? `<img src="${pin.imagem}" style="width:100%; height:100%; object-fit:cover;">` : `<span style="font-weight:900; color:#eab308; font-size:0.8rem;">${pin.numero ? String(pin.numero).padStart(2, '0') : '🔍'}</span>`}
+          </div>
+          <div>
+            <div style="color:#fff; font-weight:bold; font-size:0.85rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:140px;">${pin.titulo}</div>
+            <div style="color:#a1a1aa; font-size:0.72rem; margin-top:2px;">Coord: ${pin.x}%, ${pin.y}%</div>
+          </div>
+        </div>
+        <div style="display:flex; gap:6px; align-items:center;">
+          <button onclick="focarPinNoMapa('${pin.id}')" style="background:rgba(234,179,8,0.15); border:1px solid #eab308; color:#fef08a; padding:4px 8px; border-radius:4px; font-size:0.75rem; cursor:pointer; font-weight:bold;" title="Ver e Focar no Mapa">👁 Ver</button>
+          ${pin.imagem ? (isProjetada ?
+            `<button onclick="fecharPistaNaTV(); renderizarCatalogo();" style="background:#dc2626; border:1px solid #ef4444; color:#fff; padding:4px 8px; border-radius:4px; font-size:0.75rem; cursor:pointer; font-weight:bold;" title="Ocultar da TV">✕ Ocultar</button>` :
+            `<button onclick="projetarImagemPinDireto('${pin.imagem}', '${pin.titulo.replace(/'/g, "\\\'")}'); renderizarCatalogo();" style="background:#581c87; border:1px solid #a855f7; color:#fff; padding:4px 8px; border-radius:4px; font-size:0.75rem; cursor:pointer; font-weight:bold;" title="Projetar na TV">📺 TV</button>`
+          ) : ''}
+        </div>
+      `;
+      lista.appendChild(div);
+    });
+    return;
+  }
   let arrayAtual = catalogoAtivo === 'jogadores' ? (vttState.catalogoAgentes || []) : (vttState.catalogoMonstros || []);
   
   arrayAtual.forEach(item => {
@@ -718,66 +902,100 @@ function desenharTokensBetaNoMestre() {
 
   tokensParaDesenhar.forEach(tok => {
     const el = document.createElement('div');
-    el.className = 'token-mestre-arrastavel token-mesa-item';
+    el.className = 'token-mestre-arrastavel token-mesa-item standee-token-mestre';
     el.id = 'token-ui-' + tok.id;
     
-    const tamanhoPx = 70 * (tok.escala || 1);
-    el.style.cssText = `
-      position: absolute;
-      left: ${tok.x}%;
-      top: ${tok.y}%;
-      width: ${tamanhoPx}px;
-      height: ${tamanhoPx}px;
-      cursor: grab;
-      user-select: none;
-      z-index: ${tok.id === tokenSelecionadoId ? '100' : '50'};
-      transform: translate(-50%, -50%);
-      border-radius: 0;
-      background: transparent;
-    `;
-    
-   if (tok.id === tokenSelecionadoId) el.style.filter = `drop-shadow(0 0 15px #e40712)`; 
-    else if (window.tokensSelecionadosMulti && window.tokensSelecionadosMulti.includes(tok.id)) el.style.filter = `drop-shadow(0 0 15px #c19429)`; 
+    // Proporção Standee (altura vertical com ponto de apoio nos pés)
+    const larguraPx = 75 * (tok.escala || 1);
+    const alturaPx = 110 * (tok.escala || 1);
+
+    el.style.position = 'absolute';
+    el.style.left = tok.x + '%';
+    el.style.top = tok.y + '%';
+    el.style.width = larguraPx + 'px';
+    el.style.height = alturaPx + 'px';
+    el.style.transform = 'translate(-50%, -88%)';
+    el.style.cursor = 'grab';
+    el.style.userSelect = 'none';
+    el.style.touchAction = 'none';
+    el.style.zIndex = tok.id === tokenSelecionadoId ? '100' : '50';
+    el.style.display = 'flex';
+    el.style.flexDirection = 'column';
+    el.style.alignItems = 'center';
+    el.style.transition = 'filter 0.2s ease, opacity 0.2s ease';
+
+    if (tok.id === tokenSelecionadoId) el.style.filter = 'drop-shadow(0 0 15px #e40712)'; 
+    else if (window.tokensSelecionadosMulti && window.tokensSelecionadosMulti.includes(tok.id)) el.style.filter = 'drop-shadow(0 0 15px #c19429)'; 
     if (tok.visivel === false) el.style.opacity = '0.35';
 
     if (tok.img) {
-      el.innerHTML = `<img src="${tok.img}" draggable="false" style="width:100%; height:100%; object-fit:contain; pointer-events:none; border-radius:0;">`;
+      el.innerHTML = `
+        <span class="standee-label-mestre">${tok.nome || ''}</span>
+        <img src="${tok.img}" draggable="false" style="width:100%; height:100%; object-fit:contain; pointer-events:none; filter: drop-shadow(0 5px 10px rgba(0,0,0,0.8));">
+        <div class="standee-sombra-mestre"></div>
+      `;
+    } else {
+      el.innerHTML = `
+        <span class="standee-label-mestre">${tok.nome || ''}</span>
+        <div style="width: 60px; height: 60px; border-radius: 50%; background: #1c1c28; border: 2px solid #ef4444; color:#fff; display:flex; align-items:center; justify-content:center; font-weight:bold; font-size:1rem; box-shadow: 0 4px 12px rgba(0,0,0,0.8);">
+          ${(tok.nome || 'A').substring(0, 2).toUpperCase()}
+        </div>
+        <div class="standee-sombra-mestre"></div>
+      `;
     }
 
-    el.onmousedown = function(e) {
-      if(ferramentaAtiva !== 'select') return;
-      e.stopPropagation();
-      
-      // CORREÇÃO: Se estiver mirando para atacar, NÃO inicia o arrasto!
-      if (window.modoMiraAtivo) return; 
+    // Início do arrasto (Unificado Mouse + Touch)
+    function iniciarArrastoToken(clientX, clientY, e) {
+      if (ferramentaAtiva !== 'select') return;
+      if (e && e.stopPropagation) e.stopPropagation();
+      if (window.modoMiraAtivo) return;
 
-      selecionarToken(tok.id); 
+      selecionarToken(tok.id);
       tokenArrastandoId = tok.id;
-      tMousedownX = e.clientX;
-      tMousedownY = e.clientY;
-    };
-    
-    el.onmouseup = function(e) {
-      if(ferramentaAtiva !== 'select') return;
-      
-      // Se estiver no Modo de Mira, resolve o ataque e para por aqui
+      tMousedownX = clientX;
+      tMousedownY = clientY;
+    }
+
+    // Fim do arrasto
+    function finalizarArrastoToken(clientX, clientY, e) {
+      if (ferramentaAtiva !== 'select') return;
       if (window.modoMiraAtivo) {
-        e.stopPropagation();
-        tokenArrastandoId = null; // Garante que o token soltou do mouse
+        if (e && e.stopPropagation) e.stopPropagation();
+        tokenArrastandoId = null;
         resolverAtaqueTatico(tok.id);
         return;
       }
-
-      const dist = Math.abs(e.clientX - tMousedownX) + Math.abs(e.clientY - tMousedownY);
-      if (dist < 5) {
+      const dist = Math.abs(clientX - tMousedownX) + Math.abs(clientY - tMousedownY);
+      if (dist < 8) {
         const rect = el.getBoundingClientRect();
         const XdoMenu = rect.left + (rect.width / 2);
-        const YdoMenu = rect.top - 10; 
+        const YdoMenu = rect.top - 10;
         abrirToolbarToken(tok.id, tok.nome, tok.pv, tok.pvMax, XdoMenu, YdoMenu);
       }
       tokenArrastandoId = null;
       salvarEstadoTabuleiro();
+    }
+
+    // Handlers para Mouse
+    el.onmousedown = function(e) {
+      iniciarArrastoToken(e.clientX, e.clientY, e);
     };
+    el.onmouseup = function(e) {
+      finalizarArrastoToken(e.clientX, e.clientY, e);
+    };
+
+    // Handlers para Touch no Celular
+    el.ontouchstart = function(e) {
+      if (e.touches && e.touches.length > 0) {
+        iniciarArrastoToken(e.touches[0].clientX, e.touches[0].clientY, e);
+      }
+    };
+    el.ontouchend = function(e) {
+      if (e.changedTouches && e.changedTouches.length > 0) {
+        finalizarArrastoToken(e.changedTouches[0].clientX, e.changedTouches[0].clientY, e);
+      }
+    };
+
     container.appendChild(el);
   });
 }
@@ -1045,11 +1263,56 @@ if (viewportEl) {
     }
   };
   
-  viewportEl.addEventListener('wheel', function(e) { e.preventDefault(); vttState.camera.zoom = Math.max(0.5, Math.min(4, vttState.camera.zoom + (e.deltaY < 0 ? 0.1 : -0.1))); atualizarCamera(true); }, { passive: false });
+  viewportEl.addEventListener('wheel', function(e) {
+    e.preventDefault();
+    const rect = viewportEl.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+
+    const zoomOld = vttState.camera.zoom;
+    const factor = e.deltaY < 0 ? 1.14 : (1 / 1.14);
+    const zoomNew = Math.max(0.35, Math.min(5.0, zoomOld * factor));
+    
+    if (Math.abs(zoomNew - zoomOld) < 0.001) return;
+
+    vttState.camera.x = mouseX - (mouseX - vttState.camera.x) * (zoomNew / zoomOld);
+    vttState.camera.y = mouseY - (mouseY - vttState.camera.y) * (zoomNew / zoomOld);
+    vttState.camera.zoom = zoomNew;
+
+    atualizarCamera(true);
+  }, { passive: false });
 }
 
 let timerEnvioArrastoTV = null;
+let pinArrastando = null;
+let pinDragStartPos = { x: 0, y: 0 };
+let pinFoiArrastado = false;
+
 window.addEventListener('mousemove', (e) => {
+  if (pinArrastando) {
+    e.preventDefault();
+    const dist = Math.hypot(e.clientX - pinDragStartPos.x, e.clientY - pinDragStartPos.y);
+    if (dist > 3) {
+      pinFoiArrastado = true;
+    }
+    const container = document.getElementById('beta-mapa-container');
+    if (container) {
+      const rect = container.getBoundingClientRect();
+      let rawX = Math.max(0.5, Math.min(99.5, ((e.clientX - rect.left) / rect.width) * 100));
+      let rawY = Math.max(0.5, Math.min(99.5, ((e.clientY - rect.top) / rect.height) * 100));
+      
+      pinArrastando.x = Math.round(rawX * 10) / 10;
+      pinArrastando.y = Math.round(rawY * 10) / 10;
+
+      const pinEl = document.getElementById('vtt-pin-' + pinArrastando.id);
+      if (pinEl) {
+        pinEl.style.left = pinArrastando.x + '%';
+        pinEl.style.top = pinArrastando.y + '%';
+      }
+    }
+    return;
+  }
+
   if (isMarqueeSelecting) {
     const box = document.getElementById('vtt-marquee-box');
     if (box) {
@@ -1160,6 +1423,21 @@ window.addEventListener('mouseup', (e) => {
     } else {
       multiMenu.style.display = 'none';
     }
+  }
+
+  if (pinArrastando) {
+    const pinEl = document.getElementById('vtt-pin-' + pinArrastando.id);
+    if (pinEl) {
+      pinEl.classList.remove('arrastando');
+    }
+    if (pinFoiArrastado) {
+      salvarPosicaoPinAtualizada(pinArrastando);
+      mostrarToast(`Evidência "${pinArrastando.titulo}" reposicionada para (${pinArrastando.x}%, ${pinArrastando.y}%)`, 'sucesso');
+    } else {
+      abrirCardInspecaoVTT(pinArrastando);
+    }
+    pinArrastando = null;
+    pinFoiArrastado = false;
   }
 
   if (tokenArrastandoId) { tokenArrastandoId = null; salvarEstadoTabuleiro(); }
@@ -1746,31 +2024,110 @@ function fecharBuscaGlobal(e) {
 window.fecharBuscaGlobal = fecharBuscaGlobal;
 
 const inputBusca = document.getElementById('input-busca-global');
-if(inputBusca) {
+if (inputBusca) {
   inputBusca.addEventListener('input', function(e) {
-    const termo = e.target.value.toLowerCase();
+    const termo = e.target.value.toLowerCase().trim();
     const resultadosBox = document.getElementById('resultados-busca-global');
-    
-    if(termo.length < 2) {
+    if (!resultadosBox) return;
+
+    if (termo.length < 2) {
       resultadosBox.style.display = 'none';
       return;
     }
-    
-    const mockData = [
-      { tipo: 'Monstro', nome: 'Zumbi de Sangue' },
-      { tipo: 'Agente', nome: 'Arthur Cervero' },
-      { tipo: 'Regra', nome: 'Condição: Pasmo' }
+
+    const catalogoBusca = [];
+
+    // 1. Ações rápidas do sistema
+    catalogoBusca.push(
+      { tipo: 'Ação', nome: 'Abrir Tabuleiro Tático (VTT)', exec: () => { abrirModoTabuleiro(); fecharBuscaGlobal(); } },
+      { tipo: 'Ação', nome: 'Transmitir / Pausar Standby na TV', exec: () => { alternarDisplayMap(); fecharBuscaGlobal(); } },
+      { tipo: 'Ação', nome: 'Adicionar Novo Agente de Campo', exec: () => { abrirModalNovoPersonagemManual(); fecharBuscaGlobal(); } },
+      { tipo: 'Ação', nome: 'Rolar Dado Virtual D20', exec: () => { rolarDadoVirtual(20); fecharBuscaGlobal(); } },
+      { tipo: 'Ação', nome: 'Rolar Teste de Sanidade', exec: () => { rolarSanidade(); fecharBuscaGlobal(); } },
+      { tipo: 'Ação', nome: 'Rolar Dano Mental', exec: () => { rolarDanoMental(); fecharBuscaGlobal(); } }
+    );
+
+    // 2. Agentes da campanha
+    if (campanhaAtiva && campanhaAtiva.personagens) {
+      campanhaAtiva.personagens.forEach(ag => {
+        catalogoBusca.push({
+          tipo: 'Agente',
+          nome: `${ag.nome} (PV: ${ag.pv}/${ag.pvMax || ag.pv})`,
+          exec: () => { mudarAbaCockpit('agentes'); fecharBuscaGlobal(); mostrarToast(`Focando no agente ${ag.nome}`); }
+        });
+      });
+    }
+
+    // 3. Ameaças / Monstros do VTT
+    const monstros = [...(vttState.catalogoMonstros || []), ...(campanhaAtiva?.ameacas || [])];
+    monstros.forEach(m => {
+      catalogoBusca.push({
+        tipo: 'Ameaça',
+        nome: m.nome,
+        exec: () => { mudarAbaCockpit('ameacas'); fecharBuscaGlobal(); mostrarToast(`Ameaça ${m.nome}`); }
+      });
+    });
+
+    // 4. Mapas do VTT
+    (vttState.galeriaMapas || []).forEach(mapa => {
+      catalogoBusca.push({
+        tipo: 'Mapa',
+        nome: mapa.nome,
+        exec: () => { abrirModoTabuleiro(); aplicarMapaNaMesa(mapa.id); fecharBuscaGlobal(); }
+      });
+    });
+
+    // 5. Cenários e Cômodos
+    if (campanhaAtiva && campanhaAtiva.locais) {
+      campanhaAtiva.locais.forEach((loc, lIdx) => {
+        catalogoBusca.push({
+          tipo: 'Cenário',
+          nome: loc.nome,
+          exec: () => { mudarAbaCockpit('cenarios'); selecionarLocalCockpit(lIdx); fecharBuscaGlobal(); }
+        });
+        (loc.comodos || []).forEach((com, cIdx) => {
+          catalogoBusca.push({
+            tipo: 'Cômodo',
+            nome: `${loc.nome} ➔ ${com.nome}`,
+            exec: () => { selecionarLocalCockpit(lIdx); selecionarComodoCockpit(cIdx); fecharBuscaGlobal(); }
+          });
+        });
+      });
+    }
+
+    // 6. Condições e Regras Oficiais
+    const condicoes = [
+      { nome: 'Pasmo', desc: 'Não pode realizar ações padrão ou de movimento.' },
+      { nome: 'Sangrando', desc: 'No início de cada turno, sofre 1d6 de dano de Sangue.' },
+      { nome: 'Perturbado', desc: 'Metade da Sanidade restante. Sofre -1d20 em testes mentais.' },
+      { nome: 'Abalado', desc: 'Sofre -1d20 em testes de perícia por medo ou pavor.' },
+      { nome: 'Vulnerável', desc: 'Sofre -5 na Defesa.' },
+      { nome: 'Agarrado', desc: 'Fica desprevenido e imóvel (-5 na Defesa, deslocamento 0).' },
+      { nome: 'Inconsciente', desc: 'Indefeso, cai no chão e não pode fazer ações.' },
+      { nome: 'Morrendo', desc: 'Com 0 PV. Faz teste de Morte a cada rodada.' }
     ];
-    
-    const filtrados = mockData.filter(item => item.nome.toLowerCase().includes(termo));
-    
-    if(filtrados.length > 0) {
-      resultadosBox.innerHTML = filtrados.map(item => 
-        `<div class="resultado-item"><strong>[${item.tipo}]</strong> ${item.nome}</div>`
-      ).join('');
+    condicoes.forEach(cond => {
+      catalogoBusca.push({
+        tipo: 'Regra',
+        nome: `Condição: ${cond.nome} — ${cond.desc}`,
+        exec: () => { mostrarToast(`[${cond.nome}] ${cond.desc}`, 'aviso'); fecharBuscaGlobal(); }
+      });
+    });
+
+    const filtrados = catalogoBusca.filter(item => item.nome.toLowerCase().includes(termo));
+
+    if (filtrados.length > 0) {
+      resultadosBox.innerHTML = '';
+      filtrados.slice(0, 10).forEach(item => {
+        const div = document.createElement('div');
+        div.className = 'resultado-item';
+        div.innerHTML = `<span style="color:var(--vtt-gold); font-size:0.75rem; font-weight:800; margin-right:6px;">[${item.tipo.toUpperCase()}]</span> <span>${item.nome}</span>`;
+        div.onclick = () => { if (item.exec) item.exec(); };
+        resultadosBox.appendChild(div);
+      });
       resultadosBox.style.display = 'block';
     } else {
-      resultadosBox.innerHTML = `<div class="resultado-item">Nenhum resultado encontrado.</div>`;
+      resultadosBox.innerHTML = `<div class="resultado-item" style="color:#717182;">Nenhum resultado para "${termo}".</div>`;
       resultadosBox.style.display = 'block';
     }
   });
@@ -2202,3 +2559,1645 @@ window.prepararEdicaoToken = function(id, isMonstro) {
   // Simula o clique no input invisível para abrir a janela do Windows/Mac
   input.click();
 };
+
+// =========================================================================
+// TABELA OFICIAL DE PERÍCIAS E REGISTRO DE AGENTES
+// =========================================================================
+const TABELA_PERICIAS_ORDEM = [
+  { nome: 'Acrobacia', attr: 'AGI', penTreino: true },
+  { nome: 'Adestramento', attr: 'PRE', treinadoApenas: true },
+  { nome: 'Artes', attr: 'PRE', treinadoApenas: true },
+  { nome: 'Atletismo', attr: 'FOR' },
+  { nome: 'Atualidades', attr: 'INT' },
+  { nome: 'Ciências', attr: 'INT', treinadoApenas: true },
+  { nome: 'Crime', attr: 'AGI', penTreino: true, treinadoApenas: true },
+  { nome: 'Diplomacia', attr: 'PRE' },
+  { nome: 'Enganação', attr: 'PRE' },
+  { nome: 'Fortitude', attr: 'VIG' },
+  { nome: 'Furtividade', attr: 'AGI', penTreino: true },
+  { nome: 'Iniciativa', attr: 'AGI' },
+  { nome: 'Intimidação', attr: 'PRE' },
+  { nome: 'Intuição', attr: 'PRE' },
+  { nome: 'Investigação', attr: 'INT' },
+  { nome: 'Luta', attr: 'FOR' },
+  { nome: 'Medicina', attr: 'INT' },
+  { nome: 'Ocultismo', attr: 'INT', treinadoApenas: true },
+  { nome: 'Percepção', attr: 'PRE' },
+  { nome: 'Pilotagem', attr: 'AGI', treinadoApenas: true },
+  { nome: 'Pontaria', attr: 'AGI' },
+  { nome: 'Profissão', attr: 'INT', treinadoApenas: true },
+  { nome: 'Reflexos', attr: 'AGI' },
+  { nome: 'Religião', attr: 'PRE', treinadoApenas: true },
+  { nome: 'Sobrevivência', attr: 'INT' },
+  { nome: 'Tática', attr: 'INT', treinadoApenas: true },
+  { nome: 'Tecnologia', attr: 'INT', treinadoApenas: true },
+  { nome: 'Vontade', attr: 'PRE' }
+];
+
+function abrirModalNovoPersonagemManual() {
+  const modal = document.getElementById('modal-personagem-manual');
+  if (!modal) return;
+  document.getElementById('p-manual-nome').value = '';
+  document.getElementById('p-manual-origem').value = '';
+  document.getElementById('p-manual-pv').value = '20';
+  document.getElementById('p-manual-san').value = '20';
+  document.getElementById('p-manual-pe').value = '2';
+  document.getElementById('p-manual-agi').value = '1';
+  document.getElementById('p-manual-for').value = '1';
+  document.getElementById('p-manual-int').value = '1';
+  document.getElementById('p-manual-pre').value = '1';
+  document.getElementById('p-manual-vig').value = '1';
+  
+  const gridPericias = document.getElementById('grid-pericias-manual-modal');
+  if (gridPericias) {
+    gridPericias.innerHTML = TABELA_PERICIAS_ORDEM.map(p => `
+      <label style="display:flex; align-items:center; gap:4px; font-size:0.75rem; color:#d4d4d8; cursor:pointer;">
+        <input type="checkbox" class="chk-pericia-manual" value="${p.nome}" data-attr="${p.attr}">
+        <span>${p.nome}</span>
+      </label>
+    `).join('');
+  }
+  
+  const listaInv = document.getElementById('lista-itens-inventario-modal');
+  if (listaInv) listaInv.innerHTML = '';
+  atualizarEspacosInventarioModal();
+  modal.style.display = 'flex';
+}
+window.abrirModalNovoPersonagemManual = abrirModalNovoPersonagemManual;
+
+function fecharModalNovoPersonagemManual() {
+  const modal = document.getElementById('modal-personagem-manual');
+  if (modal) modal.style.display = 'none';
+}
+window.fecharModalNovoPersonagemManual = fecharModalNovoPersonagemManual;
+
+function adicionarLinhaItemInventario(dados = {}) {
+  const lista = document.getElementById('lista-itens-inventario-modal');
+  if (!lista) return;
+  const row = document.createElement('div');
+  row.className = 'linha-item-inv-modal';
+  row.style.cssText = 'display:flex; gap:6px; align-items:center; background:#12121b; padding:6px; border-radius:4px; border:1px solid var(--border-subtle); margin-bottom:6px;';
+  row.innerHTML = `
+    <input type="text" class="inv-item-nome" placeholder="Item" value="${dados.nome || ''}" style="flex:2; background:#08080c; border:1px solid #272738; color:#fff; padding:4px 6px; font-size:0.75rem; border-radius:3px;">
+    <select class="inv-item-tipo" style="background:#08080c; border:1px solid #272738; color:#a1a1aa; padding:4px; font-size:0.7rem; border-radius:3px;">
+      <option value="equipamento" ${dados.tipo === 'equipamento' ? 'selected' : ''}>Equip</option>
+      <option value="arma" ${dados.tipo === 'arma' ? 'selected' : ''}>Arma</option>
+      <option value="consumivel" ${dados.tipo === 'consumivel' ? 'selected' : ''}>Consumível</option>
+    </select>
+    <input type="number" class="inv-item-espaco" placeholder="Esp." value="${dados.espaco !== undefined ? dados.espaco : 1}" style="width:36px; background:#08080c; border:1px solid #272738; color:#fff; padding:4px; font-size:0.75rem; text-align:center; border-radius:3px;" onchange="atualizarEspacosInventarioModal()">
+    <button type="button" onclick="this.parentElement.remove(); atualizarEspacosInventarioModal();" style="background:transparent; border:none; color:#ef4444; font-size:0.9rem; cursor:pointer;" title="Remover">✕</button>
+  `;
+  lista.appendChild(row);
+  atualizarEspacosInventarioModal();
+}
+window.adicionarLinhaItemInventario = adicionarLinhaItemInventario;
+
+function atualizarEspacosInventarioModal() {
+  const inputsEspaco = document.querySelectorAll('.inv-item-espaco');
+  let total = 0;
+  inputsEspaco.forEach(inp => total += (parseInt(inp.value) || 0));
+  const elPeso = document.getElementById('peso-atual');
+  if (elPeso) elPeso.innerText = total;
+  const forca = parseInt(document.getElementById('p-manual-for')?.value) || 1;
+  const elMax = document.getElementById('peso-max');
+  if (elMax) elMax.innerText = Math.max(5, forca * 5);
+}
+window.atualizarEspacosInventarioModal = atualizarEspacosInventarioModal;
+
+async function salvarNovoPersonagemManual() {
+  const nome = document.getElementById('p-manual-nome').value.trim();
+  if (!nome) { alert('Digite o nome do agente.'); return; }
+  const origem = document.getElementById('p-manual-origem').value.trim() || 'Sobrevivente';
+  const pv = parseInt(document.getElementById('p-manual-pv').value) || 20;
+  const san = parseInt(document.getElementById('p-manual-san').value) || 20;
+  const pe = parseInt(document.getElementById('p-manual-pe').value) || 2;
+  const agi = parseInt(document.getElementById('p-manual-agi').value) || 1;
+  const forca = parseInt(document.getElementById('p-manual-for').value) || 1;
+  const int = parseInt(document.getElementById('p-manual-int').value) || 1;
+  const pre = parseInt(document.getElementById('p-manual-pre').value) || 1;
+  const vig = parseInt(document.getElementById('p-manual-vig').value) || 1;
+
+  const pericias = [];
+  document.querySelectorAll('.chk-pericia-manual:checked').forEach(chk => {
+    pericias.push({ nome: chk.value, attr: chk.dataset.attr, treinada: true, outros: 0 });
+  });
+
+  const inventario = [];
+  const armas = [];
+  document.querySelectorAll('.linha-item-inv-modal').forEach(row => {
+    const itemNome = row.querySelector('.inv-item-nome').value.trim();
+    if (!itemNome) return;
+    const tipo = row.querySelector('.inv-item-tipo').value;
+    const espaco = parseInt(row.querySelector('.inv-item-espaco').value) || 1;
+    if (tipo === 'arma') {
+      armas.push({ nome: itemNome, dadosAttr: 'AGI', bonus: 0, dano: '1d6' });
+    } else {
+      inventario.push({ nome: itemNome, tipo: tipo, espaco: espaco, qtd: 1 });
+    }
+  });
+
+  const novoAgente = {
+    id: 'agente_' + Date.now(),
+    nome: nome,
+    jogador: 'Agente',
+    origem: origem,
+    classe: origem,
+    pv: pv, pvMax: pv,
+    san: san, sanMax: san,
+    pe: pe, peMax: pe,
+    atributos: { AGI: agi, FOR: forca, INT: int, PRE: pre, VIG: vig },
+    pericias: pericias,
+    inventario: inventario,
+    armas: armas,
+    habilidades: [],
+    avatar: ''
+  };
+
+  const campAlvo = campanhaSendoEditada || campanhaAtiva;
+  if (!campAlvo) { alert('Selecione ou edite uma campanha primeiro.'); return; }
+  if (!campAlvo.personagens) campAlvo.personagens = [];
+  campAlvo.personagens.push(novoAgente);
+
+  await persistirCampanhaNoServidor(campAlvo);
+  if (campanhaSendoEditada) renderizarPersonagensNaEdicao();
+  if (campanhaAtiva) {
+    renderizarMonitoresAgentesCockpit();
+    if (typeof window.sincronizarTokensComCampanha === 'function') {
+      window.sincronizarTokensComCampanha(campAlvo.personagens);
+    }
+  }
+
+  fecharModalNovoPersonagemManual();
+  mostrarToast(`Agente "${nome}" registrado com sucesso!`);
+}
+window.salvarNovoPersonagemManual = salvarNovoPersonagemManual;
+
+function acionarStandby() {
+  const standbyImg = campanhaAtiva ? (campanhaAtiva.imagemStandby || campanhaAtiva.standby || '') : '';
+  socket.emit('tv_definir_standby', { emStandby: true, standbyImg: standbyImg });
+  mostrarToast('Mesa colocada em Standby!', 'aviso');
+}
+window.acionarStandby = acionarStandby;
+
+function fecharPistaNoTablet() {
+  fecharPistaNaTV();
+}
+window.fecharPistaNoTablet = fecharPistaNoTablet;
+
+function mostrarPistaNoTablet(url) {
+  if (!url) return;
+  socket.emit('tv_mostrar_handout', url);
+  atualizarUIHandoutVisivel(url);
+  mostrarToast('Pista transmitida para as telas!');
+}
+window.mostrarPistaNoTablet = mostrarPistaNoTablet;
+
+function importarJsonPersonagensNaEdicao() {
+  const input = document.getElementById('json-personagens-edicao-input');
+  if (!input || !input.value.trim()) return;
+  try {
+    const parsed = JSON.parse(input.value.trim());
+    const lista = Array.isArray(parsed) ? parsed : [parsed];
+    if (!campanhaSendoEditada.personagens) campanhaSendoEditada.personagens = [];
+    lista.forEach(p => {
+      const idx = campanhaSendoEditada.personagens.findIndex(x => x.nome === p.nome || (p.id && x.id === p.id));
+      if (idx >= 0) campanhaSendoEditada.personagens[idx] = p;
+      else campanhaSendoEditada.personagens.push(p);
+    });
+    renderizarPersonagensNaEdicao();
+    document.getElementById('json-campanha-completa-input').value = JSON.stringify(campanhaSendoEditada, null, 2);
+    input.value = '';
+    mostrarToast(`${lista.length} agentes importados!`);
+  } catch (err) {
+    alert('Erro ao processar JSON de personagens: ' + err.message);
+  }
+}
+window.importarJsonPersonagensNaEdicao = importarJsonPersonagensNaEdicao;
+
+function aplicarJsonCompletoNaCampanha() {
+  const input = document.getElementById('json-campanha-completa-input');
+  if (!input || !input.value.trim()) return;
+  try {
+    const parsed = JSON.parse(input.value.trim());
+    campanhaSendoEditada = Object.assign(campanhaSendoEditada || {}, parsed);
+    document.getElementById('edit-camp-nome').value = campanhaSendoEditada.nome || '';
+    document.getElementById('edit-camp-id').value = campanhaSendoEditada.id || '';
+    document.getElementById('edit-camp-standby').value = campanhaSendoEditada.imagemStandby || '';
+    renderizarPersonagensNaEdicao();
+    mostrarToast('Dados da campanha atualizados a partir do JSON!');
+  } catch (err) {
+    alert('Erro no JSON da campanha: ' + err.message);
+  }
+}
+window.aplicarJsonCompletoNaCampanha = aplicarJsonCompletoNaCampanha;
+
+async function salvarNovaCampanhaJson() {
+  const input = document.getElementById('novo-camp-json-input');
+  if (!input || !input.value.trim()) return;
+  try {
+    const parsed = JSON.parse(input.value.trim());
+    if (!parsed.id || !parsed.nome) { alert('O JSON precisa ter "id" e "nome".'); return; }
+    await fetch('/api/campanhas', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(parsed) });
+    fecharModalNovaCampanha();
+    mostrarToast('Campanha importada com sucesso!');
+    await carregarCampanhas();
+    abrirTelaEdicaoCampanha(parsed.id);
+  } catch (err) {
+    alert('JSON inválido: ' + err.message);
+  }
+}
+window.salvarNovaCampanhaJson = salvarNovaCampanhaJson;
+
+// =========================================================================
+// CENÁRIOS, CÔMODOS & PINS INVESTIGATIVOS
+// =========================================================================
+function renderizarCenariosCockpit() {
+  const deckLocais = document.getElementById('deck-locais');
+  if (!deckLocais) return;
+  deckLocais.innerHTML = '';
+  const locais = (campanhaAtiva && campanhaAtiva.locais) ? campanhaAtiva.locais : [];
+  
+  if (locais.length === 0) {
+    deckLocais.innerHTML = `
+      <div onclick="abrirModalNovoCenarioCockpit()" style="background:#13131c; border:2px dashed #2d2d42; border-radius:8px; padding:24px; text-align:center; cursor:pointer; width:100%; transition:0.2s;" onmouseover="this.style.borderColor='#9333ea'" onmouseout="this.style.borderColor='#2d2d42'">
+        <div style="font-size:1.8rem; margin-bottom:8px;">🗺️</div>
+        <strong style="color:#fff; font-size:0.95rem; display:block;">Nenhum cenário registrado nesta missão</strong>
+        <span style="color:#a1a1aa; font-size:0.75rem; margin-top:4px; display:block;">Clique aqui para adicionar seu primeiro local ou mapa de investigação</span>
+        <button class="btn-cris-purple" style="margin-top:12px; font-size:0.75rem; padding:6px 14px; pointer-events:none;">+ Adicionar Cenário</button>
+      </div>
+    `;
+    const box = document.getElementById('box-comodos-container');
+    if (box) box.style.display = 'none';
+    return;
+  }
+
+  locais.forEach((loc, idx) => {
+    const card = document.createElement('div');
+    card.className = 'card-cenario-item';
+    const thumb = loc.imagem || 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?q=80&w=400';
+    card.innerHTML = `
+      <div class="card-deck-thumb" style="background-image:url('${thumb}')"></div>
+      <div class="card-deck-body">
+        <div class="card-deck-titulo">${loc.nome}</div>
+        <div class="card-deck-sub">${(loc.comodos || []).length} Cômodos</div>
+      </div>
+    `;
+    card.onclick = () => selecionarLocalCockpit(idx);
+    deckLocais.appendChild(card);
+  });
+}
+window.renderizarCenariosCockpit = renderizarCenariosCockpit;
+
+function selecionarLocalCockpit(idx) {
+  if (!campanhaAtiva || !campanhaAtiva.locais) return;
+  localAtivo = campanhaAtiva.locais[idx];
+  if (!localAtivo) return;
+
+  const boxComodos = document.getElementById('box-comodos-container');
+  const titLocal = document.getElementById('local-selecionado-titulo');
+  const deckComodos = document.getElementById('deck-comodos');
+  if (boxComodos) boxComodos.style.display = 'block';
+  if (titLocal) titLocal.innerText = `Cenário: ${localAtivo.nome}`;
+  if (!deckComodos) return;
+  deckComodos.innerHTML = '';
+
+  const comodos = localAtivo.comodos || [];
+  if (comodos.length === 0) {
+    deckComodos.innerHTML = '<p style="color:#717182; font-size:0.85rem; padding:12px;">Nenhum cômodo adicionado a este cenário.</p>';
+    return;
+  }
+
+  comodos.forEach((com, cIdx) => {
+    const card = document.createElement('div');
+    card.className = 'card-comodo-item';
+    const thumb = com.imagem || com.img || 'https://images.unsplash.com/photo-1513694203232-719a280e022f?q=80&w=400';
+    card.innerHTML = `
+      <div class="card-deck-thumb" style="background-image:url('${thumb}')"></div>
+      <div class="card-deck-body">
+        <div class="card-deck-titulo">${com.nome}</div>
+        <div class="card-deck-sub">${(com.pins || []).length} Evidências</div>
+      </div>
+    `;
+    card.onclick = () => selecionarComodoCockpit(cIdx);
+    deckComodos.appendChild(card);
+  });
+}
+window.selecionarLocalCockpit = selecionarLocalCockpit;
+
+function abrirModalNovoComodo() {
+  document.getElementById('form-comodo-nome').value = '';
+  document.getElementById('form-comodo-img').value = '';
+  document.getElementById('form-comodo-narracao').value = '';
+  document.getElementById('modal-comodo').style.display = 'flex';
+}
+window.abrirModalNovoComodo = abrirModalNovoComodo;
+
+function fecharModalComodo() {
+  document.getElementById('modal-comodo').style.display = 'none';
+}
+window.fecharModalComodo = fecharModalComodo;
+
+async function salvarFormComodo() {
+  const nome = document.getElementById('form-comodo-nome').value.trim();
+  const img = document.getElementById('form-comodo-img').value.trim();
+  const narracao = document.getElementById('form-comodo-narracao').value.trim();
+  if (!nome) { alert('Digite o nome do cômodo.'); return; }
+  if (!localAtivo) {
+    if (!campanhaAtiva.locais) campanhaAtiva.locais = [];
+    localAtivo = { nome: 'Local Principal', imagem: img, comodos: [] };
+    campanhaAtiva.locais.push(localAtivo);
+  }
+  if (!localAtivo.comodos) localAtivo.comodos = [];
+  localAtivo.comodos.push({ id: 'comodo_' + Date.now(), nome, imagem: img, narracao, pins: [] });
+  await persistirCampanhaNoServidor(campanhaAtiva);
+  fecharModalComodo();
+  mostrarToast(`Cômodo "${nome}" salvo!`);
+  const lIdx = campanhaAtiva.locais.indexOf(localAtivo);
+  selecionarLocalCockpit(lIdx >= 0 ? lIdx : 0);
+}
+window.salvarFormComodo = salvarFormComodo;
+
+function selecionarComodoCockpit(cIdx) {
+  if (!localAtivo || !localAtivo.comodos) return;
+  comodoAtivo = localAtivo.comodos[cIdx];
+  if (!comodoAtivo) return;
+
+  document.getElementById('detalhe-comodo-nome').innerText = comodoAtivo.nome;
+  document.getElementById('detalhe-comodo-narracao').innerText = comodoAtivo.narracao || 'Sem narração registrada.';
+  const palco = document.getElementById('palco-comodo');
+  if (palco) {
+    palco.style.backgroundImage = `url('${comodoAtivo.imagem || comodoAtivo.img || ''}')`;
+    renderizarPinsComodo();
+  }
+  mudarView('view-comodo-detalhes');
+}
+window.selecionarComodoCockpit = selecionarComodoCockpit;
+
+function renderizarPinsComodo() {
+  const palco = document.getElementById('palco-comodo');
+  if (!palco || !comodoAtivo) return;
+  palco.querySelectorAll('.pin-marcador').forEach(p => p.remove());
+  (comodoAtivo.pins || []).forEach(pin => {
+    const el = document.createElement('div');
+    el.className = 'pin-marcador' + (pin.numero ? ' pin-com-numero' : '');
+    el.style.left = `${pin.x}%`;
+    el.style.top = `${pin.y}%`;
+    el.innerText = pin.numero ? String(pin.numero).padStart(2, '0') : '🔍';
+    el.title = pin.titulo || 'Evidência';
+    el.onclick = (e) => {
+      e.stopPropagation();
+      exibirDetalhePin(pin);
+    };
+    palco.appendChild(el);
+  });
+}
+window.renderizarPinsComodo = renderizarPinsComodo;
+
+function exibirDetalhePin(pin) {
+  const card = document.getElementById('detalhe-pin-card');
+  if (!card) return;
+  document.getElementById('pin-card-titulo').innerText = pin.titulo || 'Evidência';
+  document.getElementById('pin-card-desc').innerText = pin.desc || '';
+  
+  const imgEl = document.getElementById('pin-card-img');
+  const btnTv = document.getElementById('btn-exibir-pin-tv');
+  
+  if (imgEl) {
+    if (pin.imagem) {
+      imgEl.src = pin.imagem;
+      imgEl.style.display = 'block';
+    } else {
+      imgEl.style.display = 'none';
+    }
+  }
+
+  if (btnTv) {
+    if (pin.imagem) {
+      btnTv.style.display = 'block';
+      btnTv.onclick = () => {
+        if (typeof socket !== 'undefined') {
+          socket.emit('tv_mostrar_handout', pin.imagem);
+          const btnRec = document.getElementById('btn-recolher-pista'); if (btnRec) btnRec.style.display = 'block';
+          mostrarNotificacao('Imagem do Ponto enviada para a TV!');
+        }
+      };
+    } else {
+      btnTv.style.display = 'none';
+    }
+  }
+
+  const btnHandout = document.getElementById('btn-exibir-handout-tablet');
+  if (btnHandout) {
+    btnHandout.onclick = () => mostrarPistaNoTablet(pin.handout || pin.imagem);
+  }
+  card.style.display = 'block';
+}
+window.exibirDetalhePin = exibirDetalhePin;
+
+function abrirModalEditarComodoAtual() {
+  if (!comodoAtivo) return;
+  document.getElementById('form-comodo-nome').value = comodoAtivo.nome || '';
+  document.getElementById('form-comodo-img').value = comodoAtivo.imagem || comodoAtivo.img || '';
+  document.getElementById('form-comodo-narracao').value = comodoAtivo.narracao || '';
+  document.getElementById('modal-comodo').style.display = 'flex';
+}
+window.abrirModalEditarComodoAtual = abrirModalEditarComodoAtual;
+
+function transmitirComodoAtual() {
+  if (!comodoAtivo) return;
+  const dados = {
+    nome: comodoAtivo.nome,
+    imagem: comodoAtivo.imagem || comodoAtivo.img || '',
+    narracao: comodoAtivo.narracao || ''
+  };
+  socket.emit('transmitir_cena_tablet', dados);
+  socket.emit('tv_mostrar_cena', dados);
+  mostrarToast(`Cenário "${comodoAtivo.nome}" projetado na TV e Tablet!`, 'sucesso');
+}
+window.transmitirComodoAtual = transmitirComodoAtual;
+
+function transmitirCenaAtualCockpit() {
+  if (comodoAtivo) {
+    transmitirComodoAtual();
+    return;
+  }
+  if (localAtivo && localAtivo.comodos && localAtivo.comodos.length > 0) {
+    comodoAtivo = localAtivo.comodos[0];
+    transmitirComodoAtual();
+    return;
+  }
+  if (campanhaAtiva && campanhaAtiva.locais && campanhaAtiva.locais.length > 0) {
+    const loc = campanhaAtiva.locais[0];
+    const com = (loc.comodos && loc.comodos.length > 0) ? loc.comodos[0] : { nome: loc.nome, imagem: loc.imagem || '' };
+    comodoAtivo = com;
+    transmitirComodoAtual();
+    return;
+  }
+  if (vttState.mapaAtivoUrl) {
+    socket.emit('tv_definir_standby', { emStandby: false, mapaAtivoUrl: vttState.mapaAtivoUrl });
+    socket.emit('tv_trocar_mapa', vttState.mapaAtivoUrl);
+    socket.emit('tv_atualizar_tokens', vttState.tokens || []);
+    socket.emit('tv_aplicar_camera', vttState.camera);
+    mostrarToast("Mapa tático transmitido para a TV!", "sucesso");
+  }
+}
+window.transmitirCenaAtualCockpit = transmitirCenaAtualCockpit;
+window.transmitirMansaoOficial = transmitirCenaAtualCockpit;
+
+function transmitirMansaoOficial() {
+  const dados = {
+    nome: "Mansão Antiga (Investigação 2.5D)",
+    andar: "Térreo",
+    imagem: "/uploads/mansao_tipora.webp",
+    narracao: "O ar gélido e o assoalho antigo rangem a cada passo..."
+  };
+  vttState.mapaAtivoUrl = '/uploads/mansao_tipora.webp';
+  isTransmitindoLive = true;
+  if (typeof socket !== 'undefined') {
+    socket.emit('transmitir_cena_tablet', dados);
+    socket.emit('tv_trocar_mapa', '/uploads/mansao_tipora.webp');
+    socket.emit('tv_definir_standby', { emStandby: false, mapaAtivoUrl: '/uploads/mansao_tipora.webp' });
+    if (vttState.tokens && vttState.tokens.length > 0) {
+      socket.emit('tv_atualizar_tokens', vttState.tokens);
+    }
+  }
+  mostrarToast("🏰 Mansão 2.5D transmitida para a TV / Tablet com sucesso!", "sucesso");
+}
+window.transmitirMansaoOficial = transmitirMansaoOficial;
+
+function abrirModalNovoPin() {
+  document.getElementById('form-pin-titulo').value = '';
+  document.getElementById('form-pin-desc').value = '';
+  document.getElementById('form-pin-handout').value = '';
+  document.getElementById('modal-pin').style.display = 'flex';
+}
+window.abrirModalNovoPin = abrirModalNovoPin;
+
+function fecharModalPin() {
+  document.getElementById('modal-pin').style.display = 'none';
+}
+window.fecharModalPin = fecharModalPin;
+
+async function salvarFormPin() {
+  const titulo = document.getElementById('form-pin-titulo').value.trim();
+  const desc = document.getElementById('form-pin-desc').value.trim();
+  const handout = document.getElementById('form-pin-handout').value.trim();
+  if (!titulo) { alert('Digite o título da evidência.'); return; }
+  if (!comodoAtivo) return;
+  if (!comodoAtivo.pins) comodoAtivo.pins = [];
+  comodoAtivo.pins.push({
+    id: 'pin_' + Date.now(),
+    titulo, desc, handout,
+    x: 50, y: 50
+  });
+  await persistirCampanhaNoServidor(campanhaAtiva);
+  fecharModalPin();
+  renderizarPinsComodo();
+  mostrarToast(`Evidência "${titulo}" adicionada ao cômodo!`);
+}
+window.salvarFormPin = salvarFormPin;
+
+function ajustarStatusAgenteMestre(agenteId, tipo, delta) {
+  if (!campanhaAtiva || !campanhaAtiva.personagens) return;
+  const ag = campanhaAtiva.personagens.find(p => String(p.id) === String(agenteId));
+  if (!ag) return;
+  const maxVal = ag[tipo + 'Max'] || (tipo === 'pv' ? 20 : (tipo === 'san' ? 20 : 5));
+  ag[tipo] = Math.max(0, Math.min(maxVal, (ag[tipo] !== undefined ? ag[tipo] : maxVal) + delta));
+  
+  if (delta < 0) {
+    tocarSomProcedural('dano');
+  } else {
+    tocarSomProcedural('cura');
+  }
+
+  socket.emit('atualizar_dados_personagem', { campanhaId: campanhaAtiva.id, personagem: ag });
+  renderizarMonitoresAgentesCockpit();
+  salvarCampanhasNoDisco();
+}
+window.ajustarStatusAgenteMestre = ajustarStatusAgenteMestre;
+
+
+// =========================================================================
+// FERRAMENTAS VTT: TAMANHO DE TRAÇO E SUB-FERRAMENTAS
+// =========================================================================
+function alternarTamanhoDrawDDB(btn) {
+  if (drawTamanho === 3) drawTamanho = 6;
+  else if (drawTamanho === 6) drawTamanho = 12;
+  else if (drawTamanho === 12) drawTamanho = 24;
+  else drawTamanho = 3;
+
+  const dot = document.getElementById('svg-draw-size-dot');
+  if (dot) {
+    const scale = drawTamanho === 3 ? 0.35 : (drawTamanho === 6 ? 0.6 : (drawTamanho === 12 ? 0.9 : 1.2));
+    dot.style.transform = `scale(${scale})`;
+  }
+  if (btn) btn.title = `Tamanho do Traço: ${drawTamanho}px`;
+  mostrarToast(`Tamanho do traço: ${drawTamanho}px`, 'sucesso');
+}
+window.alternarTamanhoDrawDDB = alternarTamanhoDrawDDB;
+
+function ativarSubFerramenta(btn, classe, modo) {
+  if (classe) {
+    document.querySelectorAll('.' + classe).forEach(b => b.classList.remove('active'));
+  }
+  if (btn) btn.classList.add('active');
+}
+window.ativarSubFerramenta = ativarSubFerramenta;
+
+
+// =========================================================================
+// BESTIÁRIO DINÂMICO DE AMEAÇAS (COCKPIT DO MESTRE)
+// =========================================================================
+
+const BESTIARIO_PADRAO = [
+  {
+    id: "ameaca_zumbi_sangue",
+    nome: "Zumbi de Sangue",
+    elemento: "sangue",
+    vd: 20,
+    pv: 40,
+    pvMax: 40,
+    defesa: 15,
+    tipo: "Criatura de Sangue",
+    img: "https://images.unsplash.com/photo-1509248961158-e54f6934749c?auto=format&fit=crop&w=300&q=80",
+    descricao: "Cadáver putrefato reanimado pela torrente primordial de Sangue, movido pela compulsão brutal de rasgar carne.",
+    habilidades: [
+      { nome: "Presença Perturbadora", desc: "NEX 30% ou menor fica perturbado ao avistar a criatura (Vontade DT 15 anula)." },
+      { nome: "Faro de Sangue", desc: "A criatura localiza automaticamente seres feridos a até 18 metros." }
+    ],
+    ataques: [
+      { nome: "Garras", tipo: "Padrão", dados: 2, bonus: 5, dano: "1d6+2 Sangue", desc: "Corpo a Corpo" },
+      { nome: "Mordida", tipo: "Livre", dados: 1, bonus: 5, dano: "1d8+2 Sangue", desc: "Apenas se agarrar o alvo" }
+    ]
+  },
+  {
+    id: "ameaca_esqueleto_lodo",
+    nome: "Esqueleto de Lodo",
+    elemento: "morte",
+    vd: 20,
+    pv: 35,
+    pvMax: 35,
+    defesa: 14,
+    tipo: "Criatura de Morte",
+    img: "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=300&q=80",
+    descricao: "Ossada humana fundida a um lodo espesso e viscoso. O tempo ao seu redor corre de maneira distorcida e decadente.",
+    habilidades: [
+      { nome: "Lodo Entorpecente", desc: "Quem ataca corpo a corpo tem seu deslocamento reduzido em 3m pela gosma temporal." },
+      { nome: "Regeneração Temporal", desc: "Recupera 5 PV no início do seu turno se não foi alvo de dano de Energia." }
+    ],
+    ataques: [
+      { nome: "Pancada Óssea", tipo: "Padrão", dados: 2, bonus: 5, dano: "1d8+3 Morte", desc: "Corpo a Corpo" },
+      { nome: "Pústula de Lodo", tipo: "Padrão", dados: 2, bonus: 4, dano: "1d6+2 Morte", desc: "Disparo a 9m, efeito de lentidão" }
+    ]
+  },
+  {
+    id: "ameaca_anarquico",
+    nome: "Anárquico",
+    elemento: "energia",
+    vd: 20,
+    pv: 30,
+    pvMax: 30,
+    defesa: 16,
+    tipo: "Criatura de Energia",
+    img: "https://images.unsplash.com/photo-1579546929518-9e396f3cc809?auto=format&fit=crop&w=300&q=80",
+    descricao: "Manifestação luminescente de caos puro e eletricidade volátil. Pisca entre o mundo real e a loucura do Outro Lado.",
+    habilidades: [
+      { nome: "Instabilidade Molecular", desc: "Sua frequência de fase oscila tornando-o imune a dano crítico comum." },
+      { nome: "Pulso Eletrostático", desc: "Equipamentos eletrônicos em alcance curto entram em pane temporária." }
+    ],
+    ataques: [
+      { nome: "Descarga Caótica", tipo: "Padrão", dados: 3, bonus: 5, dano: "2d6+3 Energia", desc: "Curto alcance eletrizante" },
+      { nome: "Estalo Estático", tipo: "Livre", dados: 2, bonus: 5, dano: "1d10 Energia", desc: "Disparado como reação reflexa" }
+    ]
+  },
+  {
+    id: "ameaca_existido",
+    nome: "Existido",
+    elemento: "conhecimento",
+    vd: 20,
+    pv: 30,
+    pvMax: 30,
+    defesa: 13,
+    tipo: "Criatura de Conhecimento",
+    img: "https://images.unsplash.com/photo-1544717305-2782549b5136?auto=format&fit=crop&w=300&q=80",
+    descricao: "Alguém que soube demais e teve sua consciência substituída por palavras douradas e sussurros incessantes do Conhecimento.",
+    habilidades: [
+      { nome: "Sussurros do Outro Lado", desc: "Vontade DT 14 ou sofre 1d4 de dano de Sanidade no início do seu turno." },
+      { nome: "Grafia Maldita", desc: "Grava sigilos com sangue no chão que dificultam a esquiva dos agentes." }
+    ],
+    ataques: [
+      { nome: "Murmúrio Perturbador", tipo: "Padrão", dados: 2, bonus: 5, dano: "1d6+2 Mental", desc: "Dano psíquico à distância" },
+      { nome: "Toque do Vazio", tipo: "Padrão", dados: 1, bonus: 5, dano: "1d8+2 Físico", desc: "Corpo a corpo desorientador" }
+    ]
+  },
+  {
+    id: "ameaca_mutilador_noturno",
+    nome: "Mutilador Noturno",
+    elemento: "medo",
+    vd: 40,
+    pv: 75,
+    pvMax: 75,
+    defesa: 18,
+    tipo: "Criatura de Medo",
+    img: "https://images.unsplash.com/photo-1508739773434-c26b3d09e071?auto=format&fit=crop&w=300&q=80",
+    descricao: "Abominação furtiva que se camufla na escuridão. Seus membros alongados terminam em garras de puro pavor primordial.",
+    habilidades: [
+      { nome: "Furtividade Sobrenatural", desc: "Ganha vantagem e +5 bônus em Furtividade enquanto estiver em penumbra." },
+      { nome: "Aura de Pavor", desc: "Agentes a até 9 metros sofrem desvantagem em qualquer teste de resistência mental." }
+    ],
+    ataques: [
+      { nome: "Lâminas de Sombra", tipo: "Padrão", dados: 3, bonus: 10, dano: "2d8+5 Corte", desc: "Golpe duplo dilacerante" },
+      { nome: "Abraço do Pavor", tipo: "Completa", dados: 2, bonus: 8, dano: "2d10+4 Medo", desc: "Dano de Medo e Agarrar" }
+    ]
+  }
+];
+
+let bestiarioAtivoId = 'ameaca_zumbi_sangue';
+let filtroElementoAtual = 'todos';
+let buscaTextoBestiario = '';
+
+function getTodasAmeacas() {
+  const customizadas = (campanhaAtiva && Array.isArray(campanhaAtiva.ameacas)) ? campanhaAtiva.ameacas : [];
+  const todas = [...BESTIARIO_PADRAO];
+  customizadas.forEach(cust => {
+    const idx = todas.findIndex(m => m.id === cust.id);
+    if (idx !== -1) todas[idx] = cust;
+    else todas.push(cust);
+  });
+  return todas;
+}
+window.getTodasAmeacas = getTodasAmeacas;
+
+function filtrarBestiarioPorElemento(elemento, btn) {
+  filtroElementoAtual = elemento;
+  document.querySelectorAll('.btn-filtro-elem').forEach(b => b.classList.remove('ativo'));
+  if (btn) btn.classList.add('ativo');
+  renderizarBestiario();
+}
+window.filtrarBestiarioPorElemento = filtrarBestiarioPorElemento;
+
+function filtrarBestiarioPorTexto(txt) {
+  buscaTextoBestiario = (txt || '').toLowerCase().trim();
+  renderizarBestiario();
+}
+window.filtrarBestiarioPorTexto = filtrarBestiarioPorTexto;
+
+function selecionarAmeacaBestiario(id) {
+  bestiarioAtivoId = id;
+  renderizarBestiario();
+}
+window.selecionarAmeacaBestiario = selecionarAmeacaBestiario;
+
+function renderizarBestiario() {
+  const listaCol = document.getElementById('lista-cards-bestiario');
+  const detalheCol = document.getElementById('painel-detalhe-ameaca');
+  if (!listaCol || !detalheCol) return;
+
+  const todas = getTodasAmeacas();
+  const filtradas = todas.filter(m => {
+    const bateElem = (filtroElementoAtual === 'todos') || (m.elemento && m.elemento.toLowerCase() === filtroElementoAtual);
+    const bateTexto = !buscaTextoBestiario || (m.nome && m.nome.toLowerCase().includes(buscaTextoBestiario)) || (m.tipo && m.tipo.toLowerCase().includes(buscaTextoBestiario));
+    return bateElem && bateTexto;
+  });
+
+  if (!filtradas.find(m => m.id === bestiarioAtivoId) && filtradas.length > 0) {
+    bestiarioAtivoId = filtradas[0].id;
+  }
+
+  // Renderiza Lista de Cards
+  listaCol.innerHTML = '';
+  if (filtradas.length === 0) {
+    listaCol.innerHTML = '<div style="color: #717182; text-align: center; padding: 24px; font-size: 0.8rem;">Nenhuma ameaça encontrada para este filtro.</div>';
+  } else {
+    filtradas.forEach(m => {
+      const isSel = (m.id === bestiarioAtivoId);
+      const card = document.createElement('div');
+      card.className = 'card-bestiario-item' + (isSel ? ' selecionado' : '');
+      card.onclick = () => selecionarAmeacaBestiario(m.id);
+      
+      const elemClass = 'badge-' + (m.elemento || 'sangue').toLowerCase();
+      const thumb = m.img || 'https://via.placeholder.com/60?text=?';
+
+      card.innerHTML = `
+        <img src="${thumb}" class="card-bestiario-thumb" alt="${m.nome}" onerror="this.src='https://via.placeholder.com/60?text=?'">
+        <div class="card-bestiario-meta">
+          <div class="card-bestiario-nome">${m.nome}</div>
+          <div class="card-bestiario-sub">
+            <span class="badge-elemento-tag ${elemClass}">${m.elemento || 'Sangue'}</span>
+            <span>VD ${m.vd || 20}</span>
+            <span>• ${m.pv || 40} PV</span>
+          </div>
+        </div>
+      `;
+      listaCol.appendChild(card);
+    });
+  }
+
+  // Renderiza Detalhe da Criatura
+  const ativa = todas.find(m => m.id === bestiarioAtivoId) || filtradas[0];
+  if (!ativa) {
+    detalheCol.innerHTML = '<div style="color:#717182; text-align:center; padding: 40px;">Selecione uma ameaça para visualizar seus atributos táticos.</div>';
+    return;
+  }
+
+  const elemClass = 'badge-' + (ativa.elemento || 'sangue').toLowerCase();
+  const corElemento = {
+    sangue: '#ef4444',
+    morte: '#9494a8',
+    energia: '#c084fc',
+    conhecimento: '#facc15',
+    medo: '#ffffff'
+  }[ativa.elemento || 'sangue'] || '#ef4444';
+
+  const ataquesHtml = (ativa.ataques || []).map(atq => {
+    const dadosNum = atq.dados || 2;
+    const bonusNum = atq.bonus || 5;
+    const danoStr = atq.dano || '1d6+2';
+    return `
+      <button class="detalhe-ataque-card" onclick="rolarAtaqueMonstro('${atq.nome.replace(/'/g, "\\'")}', ${dadosNum}, ${bonusNum}, '${danoStr.replace(/'/g, "\\'")}')">
+        <div>
+          <strong style="color: #fff; font-size: 0.95rem;">${atq.nome} <span style="font-size: 0.68rem; background: #282838; padding: 2px 6px; border-radius: 4px; margin-left: 6px; color: #a1a1aa;">${atq.tipo || 'Padrão'}</span></strong>
+          <div style="font-size: 0.75rem; color: #9494a8; margin-top: 3px;">${atq.desc || 'Ataque de criatura'}</div>
+        </div>
+        <div style="text-align: right;">
+          <div style="color: #38bdf8; font-weight: bold; font-size: 0.9rem;">Teste: ${dadosNum}d20+${bonusNum}</div>
+          <div style="color: ${corElemento}; font-weight: bold; font-size: 0.8rem; margin-top: 2px;">Dano: ${danoStr}</div>
+        </div>
+      </button>
+    `;
+  }).join('');
+
+  const habilidadesHtml = (ativa.habilidades || []).map(hab => `
+    <div class="habilidade-box">
+      <div class="habilidade-nome" style="color: ${corElemento};">✦ ${hab.nome}</div>
+      <div class="habilidade-desc">${hab.desc}</div>
+    </div>
+  `).join('');
+
+  detalheCol.innerHTML = `
+    <div class="detalhe-header-box">
+      <div class="detalhe-header-info">
+        <img src="${ativa.img || 'https://via.placeholder.com/60?text=?'}" class="detalhe-avatar-img" alt="${ativa.nome}" onerror="this.src='https://via.placeholder.com/60?text=?'">
+        <div class="detalhe-header-textos">
+          <h2 style="color: ${corElemento};">${ativa.nome}</h2>
+          <div class="detalhe-tipo-linha">
+            <span class="badge-elemento-tag ${elemClass}">${ativa.elemento || 'Sangue'}</span>
+            <span>• ${ativa.tipo || 'Criatura Paranormal'}</span>
+            <span>• VD ${ativa.vd || 20}</span>
+          </div>
+        </div>
+      </div>
+      <div class="detalhe-acoes-topo">
+        <button class="btn-vtt-spawn" onclick="colocarAmeacaNoVTT('${ativa.id}')" title="Instanciar este monstro no Tabuleiro VTT">
+          <span>🎲</span> COLOCAR NO TABULEIRO (VTT)
+        </button>
+        <button class="btn-cris-subtle" onclick="abrirModalNovaAmeaca('${ativa.id}')" title="Editar dados desta criatura">✏</button>
+        <button class="btn-cris-subtle" onclick="excluirAmeaca('${ativa.id}')" title="Excluir do Bestiário">🗑</button>
+      </div>
+    </div>
+
+    <!-- ESTATÍSTICAS CHAVE -->
+    <div class="detalhe-stats-row">
+      <div class="stat-box-ameaca">
+        <div class="stat-box-label">Pontos de Vida (PV)</div>
+        <div class="stat-box-val" style="color: #ef4444;">${ativa.pv || 40} <span style="font-size:0.75rem; color:#717182;">/ ${ativa.pvMax || ativa.pv || 40}</span></div>
+      </div>
+      <div class="stat-box-ameaca">
+        <div class="stat-box-label">Defesa</div>
+        <div class="stat-box-val" style="color: #38bdf8;">${ativa.defesa || 15}</div>
+      </div>
+      <div class="stat-box-ameaca">
+        <div class="stat-box-label">Valor de Desafio</div>
+        <div class="stat-box-val" style="color: #facc15;">VD ${ativa.vd || 20}</div>
+      </div>
+    </div>
+
+    <!-- DESCRIÇÃO -->
+    ${ativa.descricao ? `
+      <div style="background: #0d0d14; border: 1px solid #1c1c28; border-radius: 6px; padding: 10px 14px; font-size: 0.78rem; color: #a1a1aa; line-height: 1.4;">
+        ${ativa.descricao}
+      </div>
+    ` : ''}
+
+    <!-- ATAQUES ROLÁVEIS -->
+    <div>
+      <div class="detalhe-secao-titulo">
+        <span>⚔️ Ações de Combate (Clique para rolar)</span>
+        <span style="font-size: 0.68rem; color: #717182;">DADO 3D + FEED</span>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 8px;">
+        ${ataquesHtml || '<div style="color:#717182; font-size:0.75rem;">Nenhum ataque configurado.</div>'}
+      </div>
+    </div>
+
+    <!-- HABILIDADES ESPECIAIS -->
+    ${habilidadesHtml ? `
+      <div>
+        <div class="detalhe-secao-titulo">
+          <span>🔮 Habilidades Especiais & Passivas</span>
+        </div>
+        <div>${habilidadesHtml}</div>
+      </div>
+    ` : ''}
+  `;
+}
+window.renderizarBestiario = renderizarBestiario;
+
+// SPANW DIRETO NO VTT
+function colocarAmeacaNoVTT(id) {
+  const todas = getTodasAmeacas();
+  const ameaca = todas.find(m => m.id === id);
+  if (!ameaca) return;
+
+  // Garante registro no catálogo de monstros do VTT
+  if (!vttState.catalogoMonstros) vttState.catalogoMonstros = [];
+  let noCatalogo = vttState.catalogoMonstros.find(m => m.id === ameaca.id);
+  if (!noCatalogo) {
+    vttState.catalogoMonstros.push({
+      id: ameaca.id,
+      nome: ameaca.nome,
+      tipo: 'monstro',
+      pv: ameaca.pv || 40,
+      pvMax: ameaca.pvMax || ameaca.pv || 40,
+      defesa: ameaca.defesa || 15,
+      img: ameaca.img || 'https://images.unsplash.com/photo-1509248961158-e54f6934749c?auto=format&fit=crop&w=300&q=80'
+    });
+  }
+
+  // Gera o token na mesa
+  colocarTokenNaMesa(ameaca.id);
+  mostrarToast(`Ameaça "${ameaca.nome}" colocada no Tabuleiro VTT!`, 'sucesso');
+}
+window.colocarAmeacaNoVTT = colocarAmeacaNoVTT;
+
+// MODAL DE AMEAÇA
+function abrirModalNovaAmeaca(idParaEditar = null) {
+  const modal = document.getElementById('modal-nova-ameaca');
+  if (!modal) return;
+
+  const containerAtaques = document.getElementById('container-linhas-ataques-form');
+  containerAtaques.innerHTML = '';
+
+  if (idParaEditar) {
+    const todas = getTodasAmeacas();
+    const m = todas.find(x => x.id === idParaEditar);
+    if (m) {
+      document.getElementById('modal-ameaca-titulo').innerText = 'Editar Ameaça: ' + m.nome;
+      document.getElementById('form-ameaca-id').value = m.id;
+      document.getElementById('form-ameaca-nome').value = m.nome;
+      document.getElementById('form-ameaca-vd').value = m.vd || 20;
+      document.getElementById('form-ameaca-elemento').value = m.elemento || 'sangue';
+      document.getElementById('form-ameaca-pv').value = m.pv || 40;
+      document.getElementById('form-ameaca-defesa').value = m.defesa || 15;
+      document.getElementById('form-ameaca-img').value = m.img || '';
+      document.getElementById('form-ameaca-desc').value = m.descricao || '';
+
+      (m.ataques || []).forEach(atq => adicionarLinhaAtaqueForm(atq));
+      modal.style.display = 'flex';
+      return;
+    }
+  }
+
+  // Modo Nova Ameaça
+  document.getElementById('modal-ameaca-titulo').innerText = 'Nova Ameaça Paranormal';
+  document.getElementById('form-ameaca-id').value = '';
+  document.getElementById('form-ameaca-nome').value = '';
+  document.getElementById('form-ameaca-vd').value = 20;
+  document.getElementById('form-ameaca-elemento').value = 'sangue';
+  document.getElementById('form-ameaca-pv').value = 40;
+  document.getElementById('form-ameaca-defesa').value = 15;
+  document.getElementById('form-ameaca-img').value = '';
+  document.getElementById('form-ameaca-desc').value = '';
+
+  adicionarLinhaAtaqueForm({ nome: 'Ataque Padrão', tipo: 'Padrão', dados: 2, bonus: 5, dano: '1d6+2 Sangue' });
+  modal.style.display = 'flex';
+}
+window.abrirModalNovaAmeaca = abrirModalNovaAmeaca;
+
+function fecharModalNovaAmeaca() {
+  const modal = document.getElementById('modal-nova-ameaca');
+  if (modal) modal.style.display = 'none';
+}
+window.fecharModalNovaAmeaca = fecharModalNovaAmeaca;
+
+function adicionarLinhaAtaqueForm(atq = null) {
+  const container = document.getElementById('container-linhas-ataques-form');
+  if (!container) return;
+
+  const nome = atq?.nome || 'Ataque';
+  const tipo = atq?.tipo || 'Padrão';
+  const dados = atq?.dados || 2;
+  const dano = atq?.dano || '1d6+2';
+
+  const row = document.createElement('div');
+  row.className = 'linha-ataque-form-item';
+  row.innerHTML = `
+    <input type="text" class="form-input-cris atq-nome" placeholder="Nome (Ex: Garras)" value="${nome}">
+    <select class="form-input-cris atq-tipo">
+      <option value="Padrão" ${tipo === 'Padrão' ? 'selected' : ''}>Padrão</option>
+      <option value="Livre" ${tipo === 'Livre' ? 'selected' : ''}>Livre</option>
+      <option value="Completa" ${tipo === 'Completa' ? 'selected' : ''}>Completa</option>
+    </select>
+    <input type="number" class="form-input-cris atq-dados" placeholder="Dados (2)" value="${dados}" title="Quantidade de d20">
+    <input type="text" class="form-input-cris atq-dano" placeholder="Dano (1d6+2)" value="${dano}">
+    <button type="button" class="btn-cris-subtle" onclick="this.parentElement.remove()" style="color:#ef4444; padding:4px;">✕</button>
+  `;
+  container.appendChild(row);
+}
+window.adicionarLinhaAtaqueForm = adicionarLinhaAtaqueForm;
+
+function salvarFormAmeaca() {
+  const idExistente = document.getElementById('form-ameaca-id').value;
+  const nome = document.getElementById('form-ameaca-nome').value.trim();
+  if (!nome) {
+    alert('Digite o nome da ameaça!');
+    return;
+  }
+
+  const vd = parseInt(document.getElementById('form-ameaca-vd').value) || 20;
+  const elemento = document.getElementById('form-ameaca-elemento').value;
+  const pv = parseInt(document.getElementById('form-ameaca-pv').value) || 40;
+  const defesa = parseInt(document.getElementById('form-ameaca-defesa').value) || 15;
+  const img = document.getElementById('form-ameaca-img').value.trim();
+  const desc = document.getElementById('form-ameaca-desc').value.trim();
+
+  // Coletar ataques
+  const ataques = [];
+  document.querySelectorAll('.linha-ataque-form-item').forEach(row => {
+    const atqNome = row.querySelector('.atq-nome').value.trim();
+    if (atqNome) {
+      ataques.push({
+        nome: atqNome,
+        tipo: row.querySelector('.atq-tipo').value,
+        dados: parseInt(row.querySelector('.atq-dados').value) || 2,
+        bonus: 5,
+        dano: row.querySelector('.atq-dano').value.trim() || '1d6+2',
+        desc: 'Ação rápida de combate'
+      });
+    }
+  });
+
+  const novaAmeaca = {
+    id: idExistente || ('ameaca_' + Date.now()),
+    nome,
+    vd,
+    elemento,
+    pv,
+    pvMax: pv,
+    defesa,
+    tipo: 'Criatura de ' + (elemento.charAt(0).toUpperCase() + elemento.slice(1)),
+    img: img || 'https://images.unsplash.com/photo-1509248961158-e54f6934749c?auto=format&fit=crop&w=300&q=80',
+    descricao: desc,
+    habilidades: [
+      { nome: "Presença Aterrorizante", desc: "Criatura emana a aura de seu elemento paranormal." }
+    ],
+    ataques: ataques.length > 0 ? ataques : [
+      { nome: 'Garras', tipo: 'Padrão', dados: 2, bonus: 5, dano: '1d6+2 ' + elemento, desc: 'Corpo a Corpo' }
+    ]
+  };
+
+  if (!campanhaAtiva.ameacas) campanhaAtiva.ameacas = [];
+  const idx = campanhaAtiva.ameacas.findIndex(x => x.id === novaAmeaca.id);
+  if (idx !== -1) {
+    campanhaAtiva.ameacas[idx] = novaAmeaca;
+  } else {
+    campanhaAtiva.ameacas.push(novaAmeaca);
+  }
+
+  bestiarioAtivoId = novaAmeaca.id;
+  fecharModalNovaAmeaca();
+  renderizarBestiario();
+  salvarCampanhasNoDisco();
+  mostrarToast(`Ameaça "${nome}" salva com sucesso!`, 'sucesso');
+}
+window.salvarFormAmeaca = salvarFormAmeaca;
+
+function excluirAmeaca(id) {
+  if (!confirm('Deseja realmente remover esta ameaça?')) return;
+  if (campanhaAtiva && campanhaAtiva.ameacas) {
+    campanhaAtiva.ameacas = campanhaAtiva.ameacas.filter(x => x.id !== id);
+    salvarCampanhasNoDisco();
+  }
+  const todas = getTodasAmeacas();
+  bestiarioAtivoId = todas.length > 0 ? todas[0].id : '';
+  renderizarBestiario();
+  mostrarToast('Ameaça removida.', 'aviso');
+}
+window.excluirAmeaca = excluirAmeaca;
+
+
+// =========================================================================
+// NOVO CENÁRIO DIRETO NO COCKPIT DO MESTRE
+// =========================================================================
+function abrirModalNovoCenarioCockpit() {
+  const modal = document.getElementById('modal-novo-cenario-cockpit');
+  if (!modal) return;
+  document.getElementById('form-cenario-cockpit-nome').value = '';
+  document.getElementById('form-cenario-cockpit-img').value = '';
+  modal.style.display = 'flex';
+}
+window.abrirModalNovoCenarioCockpit = abrirModalNovoCenarioCockpit;
+
+function fecharModalNovoCenarioCockpit() {
+  const modal = document.getElementById('modal-novo-cenario-cockpit');
+  if (modal) modal.style.display = 'none';
+}
+window.fecharModalNovoCenarioCockpit = fecharModalNovoCenarioCockpit;
+
+function salvarFormNovoCenarioCockpit() {
+  if (!campanhaAtiva) {
+    alert('Nenhuma campanha ativa selecionada.');
+    return;
+  }
+  const nome = document.getElementById('form-cenario-cockpit-nome').value.trim();
+  if (!nome) {
+    alert('Informe o nome do cenário ou local!');
+    return;
+  }
+  const imagem = document.getElementById('form-cenario-cockpit-img').value.trim() || 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?q=80&w=600';
+  
+  if (!campanhaAtiva.locais) campanhaAtiva.locais = [];
+  const novoLocal = {
+    id: 'local_' + Date.now(),
+    nome,
+    imagem,
+    comodos: [
+      { id: 'comodo_' + Date.now(), nome: 'Entrada Principal', andar: 'Térreo', imagem, pistas: [] }
+    ]
+  };
+  
+  campanhaAtiva.locais.push(novoLocal);
+  salvarCampanhasNoDisco();
+  fecharModalNovoCenarioCockpit();
+  renderizarCenariosCockpit();
+  selecionarLocalCockpit(campanhaAtiva.locais.length - 1);
+  mostrarToast(`Cenário "${nome}" adicionado com sucesso!`, 'sucesso');
+}
+window.salvarFormNovoCenarioCockpit = salvarFormNovoCenarioCockpit;
+
+
+// =========================================================================
+// SINTETIZADOR DE SOM PROCEDURAL (WEB AUDIO API - SKILL UPGRADE & GAME-FEEL)
+// =========================================================================
+let audioCtxCockpit = null;
+
+function getAudioContext() {
+  if (!audioCtxCockpit) {
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if (AudioCtx) audioCtxCockpit = new AudioCtx();
+  }
+  if (audioCtxCockpit && audioCtxCockpit.state === 'suspended') {
+    audioCtxCockpit.resume();
+  }
+  return audioCtxCockpit;
+}
+
+function tocarSomProcedural(tipo) {
+  try {
+    const ctx = getAudioContext();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+
+    if (tipo === 'dado') {
+      // Som percussivo e seco de rolagem de dados
+      [0, 0.04, 0.09].forEach((delay, i) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(320 + i * 80 + Math.random() * 60, now + delay);
+        osc.frequency.exponentialRampToValueAtTime(80, now + delay + 0.06);
+        gain.gain.setValueAtTime(0.25, now + delay);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + delay + 0.06);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(now + delay);
+        osc.stop(now + delay + 0.06);
+      });
+    } else if (tipo === 'ataque') {
+      // Impacto pesado de golpe de monstro
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(140, now);
+      osc.frequency.exponentialRampToValueAtTime(35, now + 0.22);
+      gain.gain.setValueAtTime(0.35, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(now);
+      osc.stop(now + 0.22);
+    } else if (tipo === 'dano') {
+      // Tom tenso descendente ao perder vida/sanidade
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(220, now);
+      osc.frequency.exponentialRampToValueAtTime(90, now + 0.18);
+      gain.gain.setValueAtTime(0.3, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(now);
+      osc.stop(now + 0.18);
+    } else if (tipo === 'cura') {
+      // Acorde harmônico ascendente
+      [261.63, 329.63, 392.00].forEach((freq, i) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, now + i * 0.05);
+        gain.gain.setValueAtTime(0.18, now + i * 0.05);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.05 + 0.2);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(now + i * 0.05);
+        osc.stop(now + i * 0.05 + 0.2);
+      });
+    } else if (tipo === 'click') {
+      // Estalo sutil de interface
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(600, now);
+      gain.gain.setValueAtTime(0.08, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.02);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(now);
+      osc.stop(now + 0.02);
+    }
+  } catch (e) {
+    console.warn('Áudio procedural suspenso ou não suportado:', e);
+  }
+}
+window.tocarSomProcedural = tocarSomProcedural;
+
+// =========================================================================
+// ROLADOR TÁTICO INTEGRADO AO COCKPIT DO MESTRE
+// =========================================================================
+let modificadorCockpit = 'normal';
+let qtdDadosCockpit = 1;
+
+function setModificadorCockpit(mod) {
+  modificadorCockpit = mod;
+  document.querySelectorAll('.btn-mod-cockpit').forEach(b => b.classList.remove('ativo'));
+  const btn = document.getElementById('btn-cockpit-mod-' + mod);
+  if (btn) btn.classList.add('ativo');
+
+  const badge = document.getElementById('cockpit-rolagem-tipo-badge');
+  if (badge) {
+    badge.innerText = mod.toUpperCase();
+    badge.style.background = mod === 'vantagem' ? 'rgba(34, 197, 94, 0.2)' : (mod === 'desvantagem' ? 'rgba(239, 68, 68, 0.2)' : 'rgba(147, 51, 234, 0.2)');
+    badge.style.color = mod === 'vantagem' ? '#4ade80' : (mod === 'desvantagem' ? '#f87171' : '#c084fc');
+    badge.style.borderColor = mod === 'vantagem' ? '#22c55e' : (mod === 'desvantagem' ? '#ef4444' : 'rgba(147, 51, 234, 0.4)');
+  }
+
+  // Sincroniza com as variáveis globais legadas do VTT
+  if (typeof setModificadorDado === 'function') {
+    setModificadorDado(mod);
+  }
+  tocarSomProcedural('click');
+}
+window.setModificadorCockpit = setModificadorCockpit;
+
+function alterarQtdDadosCockpit(delta) {
+  qtdDadosCockpit = Math.max(1, Math.min(10, qtdDadosCockpit + delta));
+  const el = document.getElementById('display-qtd-cockpit');
+  if (el) el.innerText = qtdDadosCockpit;
+  window.qtdDadosRolar = qtdDadosCockpit;
+  tocarSomProcedural('click');
+}
+window.alterarQtdDadosCockpit = alterarQtdDadosCockpit;
+
+function rolarDadoDoCockpit(faces) {
+  tocarSomProcedural('dado');
+  window.qtdDadosRolar = qtdDadosCockpit;
+  
+  // Sincroniza modificador
+  if (typeof setModificadorDado === 'function') {
+    setModificadorDado(modificadorCockpit);
+  }
+
+  // Executa rolagem virtual 3D
+  rolarDadoVirtual(faces);
+
+  // Registra no Feed de Rolagens
+  const agora = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  const feedLista = document.getElementById('feed-rolagens-lista');
+  if (feedLista) {
+    const avisoVazio = feedLista.querySelector('.feed-empty-aviso');
+    if (avisoVazio) avisoVazio.remove();
+
+    const card = document.createElement('div');
+    card.className = 'card-feed-rolagem';
+    card.style.borderLeft = '4px solid #a855f7';
+    card.innerHTML = `
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <span style="color:#c084fc; font-weight:900; font-size:0.82rem;">Mestre</span>
+        <span style="font-size:0.68rem; color:#717182;">${agora}</span>
+      </div>
+      <div style="font-size:0.75rem; color:#cbd5e1; margin-top:3px;">Rolagem: <b>${qtdDadosCockpit}d${faces}</b> (${modificadorCockpit.toUpperCase()})</div>
+    `;
+    feedLista.prepend(card);
+  }
+
+  mostrarToast(`Rolando ${qtdDadosCockpit}d${faces} (${modificadorCockpit})...`, 'sucesso');
+}
+window.rolarDadoDoCockpit = rolarDadoDoCockpit;
+
+function limparFeedRolagens() {
+  const feedLista = document.getElementById('feed-rolagens-lista');
+  if (feedLista) {
+    feedLista.innerHTML = '<div class="feed-empty-aviso">Histórico de rolagens limpo.</div>';
+    tocarSomProcedural('click');
+  }
+}
+window.limparFeedRolagens = limparFeedRolagens;
+
+
+// =========================================================================
+// ATALHOS DE TECLADO DO MESTRE (SKILL GAME-UI-UX)
+// =========================================================================
+window.addEventListener('keydown', (e) => {
+  // Ignora se estiver digitando em campo de texto
+  if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
+
+  if (e.key === 'Escape') {
+    // Fecha Tabuleiro VTT se aberto
+    const modalTab = document.getElementById('modal-tabuleiro');
+    if (modalTab && modalTab.style.display !== 'none') {
+      fecharModoTabuleiro();
+      return;
+    }
+    // Fecha qualquer outro modal
+    document.querySelectorAll('.modal-overlay').forEach(m => {
+      if (m.style.display !== 'none') m.style.display = 'none';
+    });
+  } else if (e.key === '1') {
+    mudarAbaCockpit('agentes');
+    tocarSomProcedural('click');
+  } else if (e.key === '2') {
+    mudarAbaCockpit('cenarios');
+    tocarSomProcedural('click');
+  } else if (e.key === '3') {
+    mudarAbaCockpit('ameacas');
+    tocarSomProcedural('click');
+  } else if (e.key === 'd' || e.key === 'D') {
+    rolarDadoDoCockpit(20);
+  }
+});
+
+
+// =========================================================================
+// TOUCH CONTROLS GLOBAIS PARA CELULAR (MOVER TOKENS & MAPA)
+// =========================================================================
+window.addEventListener('touchmove', function(e) {
+  if (pinArrastando && e.touches && e.touches.length > 0) {
+    e.preventDefault();
+    const touch = e.touches[0];
+    const dist = Math.hypot(touch.clientX - pinDragStartPos.x, touch.clientY - pinDragStartPos.y);
+    if (dist > 5) pinFoiArrastado = true;
+    const container = document.getElementById('beta-mapa-container');
+    if (container) {
+      const rect = container.getBoundingClientRect();
+      let rawX = Math.max(0.5, Math.min(99.5, ((touch.clientX - rect.left) / rect.width) * 100));
+      let rawY = Math.max(0.5, Math.min(99.5, ((touch.clientY - rect.top) / rect.height) * 100));
+      pinArrastando.x = Math.round(rawX * 10) / 10;
+      pinArrastando.y = Math.round(rawY * 10) / 10;
+      const pinEl = document.getElementById('vtt-pin-' + pinArrastando.id);
+      if (pinEl) {
+        pinEl.style.left = pinArrastando.x + '%';
+        pinEl.style.top = pinArrastando.y + '%';
+      }
+    }
+    return;
+  }
+  if (tokenArrastandoId && e.touches && e.touches.length > 0) {
+    e.preventDefault();
+    const touch = e.touches[0];
+    const t = (vttState.tokens || []).find(x => x.id === tokenArrastandoId);
+    if (t) {
+      const container = document.getElementById('beta-mapa-container');
+      if (container) {
+        const rect = container.getBoundingClientRect();
+        let rawX = Math.max(0, Math.min(100, ((touch.clientX - rect.left) / rect.width) * 100));
+        let rawY = Math.max(0, Math.min(100, ((touch.clientY - rect.top) / rect.height) * 100));
+        
+        let snapped = aplicarSnapToGridPct(rawX, rawY, rect);
+        t.x = snapped.x;
+        t.y = snapped.y;
+
+        const divToken = document.getElementById('token-ui-' + t.id);
+        if (divToken) { divToken.style.left = t.x + '%'; divToken.style.top = t.y + '%'; }
+        if (isTransmitindoLive && typeof socket !== 'undefined') {
+          socket.emit('tv_atualizar_tokens', vttState.tokens);
+        }
+      }
+    }
+  }
+}, { passive: false });
+
+window.addEventListener('touchend', function(e) {
+  if (pinArrastando) {
+    const pinEl = document.getElementById('vtt-pin-' + pinArrastando.id);
+    if (pinEl) pinEl.classList.remove('arrastando');
+    if (pinFoiArrastado) {
+      salvarPosicaoPinAtualizada(pinArrastando);
+      mostrarToast(`Evidência "${pinArrastando.titulo}" reposicionada para (${pinArrastando.x}%, ${pinArrastando.y}%)`, 'sucesso');
+    } else {
+      abrirCardInspecaoVTT(pinArrastando);
+    }
+    pinArrastando = null;
+    pinFoiArrastado = false;
+  }
+  if (tokenArrastandoId) {
+    tokenArrastandoId = null;
+    salvarEstadoTabuleiro();
+  }
+});
+
+
+// =========================================================================
+// CAMADA DE PINS & EVIDÊNCIAS DE INVESTIGAÇÃO NO TABULEIRO (VTT)
+// =========================================================================
+let pinsVisiveisNoVTT = true;
+let pinFocadoVTT = null;
+
+function togglePinsNoVTT(btn) {
+  pinsVisiveisNoVTT = !pinsVisiveisNoVTT;
+  const camada = document.getElementById('beta-camada-pins');
+  if (camada) camada.style.display = pinsVisiveisNoVTT ? 'block' : 'none';
+  if (btn) btn.classList.toggle('active', pinsVisiveisNoVTT);
+  mostrarToast(pinsVisiveisNoVTT ? 'Marcadores de inspeção exibidos.' : 'Marcadores de inspeção ocultados.', 'aviso');
+}
+window.togglePinsNoVTT = togglePinsNoVTT;
+
+function obterPinsDoMapaAtual() {
+  if (!campanhaAtiva || !campanhaAtiva.locais) return [];
+  const comodos = (campanhaAtiva.locais || []).flatMap(l => l.comodos || []);
+  
+  const isMapaPoraoApenas = String(vttState.mapaAtivoId).includes('o_porao') || (vttState.mapaAtivoUrl && vttState.mapaAtivoUrl.includes('Mapa 01'));
+  
+  let todosPins = [];
+  comodos.forEach(c => {
+    (c.pins || []).forEach(p => todosPins.push(p));
+  });
+
+  if (isMapaPoraoApenas) {
+    return todosPins.filter(p => !p.numero || p.numero <= 17);
+  }
+  return todosPins;
+}
+window.obterPinsDoMapaAtual = obterPinsDoMapaAtual;
+
+async function salvarPosicaoPinAtualizada(pin) {
+  if (!pin) return;
+  if (campanhaAtiva && campanhaAtiva.locais) {
+    campanhaAtiva.locais.forEach(loc => {
+      (loc.comodos || []).forEach(com => {
+        (com.pins || []).forEach(p => {
+          if (p.id === pin.id || (pin.numero && p.numero === pin.numero)) {
+            p.x = pin.x;
+            p.y = pin.y;
+          }
+        });
+      });
+    });
+    await persistirCampanhaNoServidor(campanhaAtiva);
+  }
+  if (typeof renderizarCatalogo === 'function' && catalogoAtivo === 'evidencias') {
+    renderizarCatalogo();
+  }
+}
+window.salvarPosicaoPinAtualizada = salvarPosicaoPinAtualizada;
+
+function desenharPinsNoVTT() {
+  const camada = document.getElementById('beta-camada-pins');
+  if (!camada) return;
+  camada.innerHTML = '';
+  
+  const pins = obterPinsDoMapaAtual();
+  pins.forEach(pin => {
+    const el = document.createElement('div');
+    el.className = 'vtt-pin-marker' + (pinFocadoVTT && pinFocadoVTT.id === pin.id ? ' ativo' : '');
+    el.id = 'vtt-pin-' + pin.id;
+    el.style.left = pin.x + '%';
+    el.style.top = pin.y + '%';
+    el.innerText = pin.numero ? String(pin.numero).padStart(2, '0') : '🔍';
+    el.title = pin.titulo ? `${pin.titulo} (Clique para inspecionar, Arraste para mover)` : 'Ponto de Inspeção';
+
+    el.addEventListener('mousedown', (e) => {
+      if (e.button !== 0) return;
+      e.stopPropagation();
+      pinArrastando = pin;
+      pinDragStartPos = { x: e.clientX, y: e.clientY };
+      pinFoiArrastado = false;
+      el.classList.add('arrastando');
+    });
+
+    el.addEventListener('touchstart', (e) => {
+      if (e.touches && e.touches.length === 1) {
+        const touch = e.touches[0];
+        pinArrastando = pin;
+        pinDragStartPos = { x: touch.clientX, y: touch.clientY };
+        pinFoiArrastado = false;
+        el.classList.add('arrastando');
+      }
+    }, { passive: true });
+
+    camada.appendChild(el);
+  });
+}
+window.desenharPinsNoVTT = desenharPinsNoVTT;
+
+function abrirCardInspecaoVTT(pin) {
+  if (!pin) return;
+  pinFocadoVTT = pin;
+
+  document.querySelectorAll('.vtt-pin-marker').forEach(m => m.classList.remove('ativo'));
+  const pinEl = document.getElementById('vtt-pin-' + pin.id);
+  if (pinEl) pinEl.classList.add('ativo');
+
+  const card = document.getElementById('vtt-pin-inspect-card');
+  const numEl = document.getElementById('vtt-pin-card-num');
+  const titEl = document.getElementById('vtt-pin-card-titulo');
+  const descEl = document.getElementById('vtt-pin-card-desc');
+  const imgEl = document.getElementById('vtt-pin-card-img');
+  const wrapperImg = document.getElementById('vtt-pin-img-wrapper');
+  const btnTv = document.getElementById('btn-vtt-pin-projetar-tv');
+
+  if (numEl) numEl.innerText = pin.numero ? String(pin.numero).padStart(2, '0') : '🔍';
+  if (titEl) titEl.innerText = pin.titulo || 'Evidência / Ponto de Inspeção';
+  if (descEl) descEl.innerHTML = formatarDescricaoPin(pin.desc);
+
+  const btnOcultar = document.getElementById('btn-vtt-pin-ocultar-tv');
+  if (pin.imagem) {
+    if (imgEl) imgEl.src = pin.imagem;
+    if (wrapperImg) wrapperImg.style.display = 'block';
+    if (imagemAtivaNaTV === pin.imagem) {
+      if (btnTv) btnTv.style.display = 'none';
+      if (btnOcultar) btnOcultar.style.display = 'flex';
+    } else {
+      if (btnTv) btnTv.style.display = 'flex';
+      if (btnOcultar) btnOcultar.style.display = 'none';
+    }
+  } else {
+    if (wrapperImg) wrapperImg.style.display = 'none';
+    if (btnTv) btnTv.style.display = 'none';
+    if (btnOcultar) btnOcultar.style.display = 'none';
+  }
+
+  if (card) {
+    card.style.display = 'block';
+  }
+}
+window.abrirCardInspecaoVTT = abrirCardInspecaoVTT;
+
+function fecharCardInspecaoVTT() {
+  pinFocadoVTT = null;
+  document.querySelectorAll('.vtt-pin-marker').forEach(m => m.classList.remove('ativo'));
+  const card = document.getElementById('vtt-pin-inspect-card');
+  if (card) card.style.display = 'none';
+}
+window.fecharCardInspecaoVTT = fecharCardInspecaoVTT;
+
+let imagemAtivaNaTV = null;
+
+function atualizarUIHandoutVisivel(url) {
+  imagemAtivaNaTV = url;
+  const vttBtnRec = document.getElementById('vtt-btn-recolher-pista');
+  if (vttBtnRec) vttBtnRec.style.display = 'inline-flex';
+  const btnCockpit = document.getElementById('btn-recolher-pista');
+  if (btnCockpit) btnCockpit.style.display = 'block';
+
+  const btnProjetar = document.getElementById('btn-vtt-pin-projetar-tv');
+  const btnOcultar = document.getElementById('btn-vtt-pin-ocultar-tv');
+  if (btnProjetar && btnOcultar) {
+    btnProjetar.style.display = 'none';
+    btnOcultar.style.display = 'flex';
+  }
+}
+window.atualizarUIHandoutVisivel = atualizarUIHandoutVisivel;
+
+function atualizarUIHandoutOculto() {
+  imagemAtivaNaTV = null;
+  const vttBtnRec = document.getElementById('vtt-btn-recolher-pista');
+  if (vttBtnRec) vttBtnRec.style.display = 'none';
+  const btnCockpit = document.getElementById('btn-recolher-pista');
+  if (btnCockpit) btnCockpit.style.display = 'none';
+
+  const btnProjetar = document.getElementById('btn-vtt-pin-projetar-tv');
+  const btnOcultar = document.getElementById('btn-vtt-pin-ocultar-tv');
+  if (btnProjetar && btnOcultar) {
+    if (pinFocadoVTT && pinFocadoVTT.imagem) {
+      btnProjetar.style.display = 'flex';
+    }
+    btnOcultar.style.display = 'none';
+  }
+}
+window.atualizarUIHandoutOculto = atualizarUIHandoutOculto;
+
+function fecharPistaNaTV() {
+  if (typeof socket !== 'undefined') {
+    socket.emit('tv_esconder_handout');
+  }
+  atualizarUIHandoutOculto();
+  mostrarToast('Imagem recolhida da TV! O tabuleiro está visível.', 'sucesso');
+}
+window.fecharPistaNaTV = fecharPistaNaTV;
+
+function projetarPinAtualTV() {
+  if (!pinFocadoVTT || !pinFocadoVTT.imagem) return;
+  socket.emit('tv_mostrar_handout', pinFocadoVTT.imagem);
+  atualizarUIHandoutVisivel(pinFocadoVTT.imagem);
+  mostrarToast(`Imagem "${pinFocadoVTT.titulo}" projetada na TV!`, 'sucesso');
+}
+window.projetarPinAtualTV = projetarPinAtualTV;
+
+function formatarDescricaoPin(desc) {
+  if (!desc) return '<span style="color:#717182;">Sem notas registradas para este ponto.</span>';
+  return desc
+    .replace(/(DT\s*\d+)/gi, '<strong style="color:#eab308; background:rgba(234,179,8,0.15); padding:1px 5px; border-radius:3px;">$1</strong>')
+    .replace(/(ARROMBAR|DESTRANCAR|INVESTIGAÇÃO|PERCEPÇÃO|CRIME|TECNOLOGIA|OCULTISMO|RELIGIÃO)/gi, '<strong style="color:#ef4444;">$1</strong>');
+}
+
+function focarPinNoMapa(pinId) {
+  const pins = obterPinsDoMapaAtual();
+  const pin = pins.find(p => p.id === pinId);
+  if (!pin) return;
+  abrirCardInspecaoVTT(pin);
+
+  const container = document.getElementById('beta-mapa-container');
+  const viewport = document.getElementById('beta-viewport');
+  if (container && viewport) {
+    const mapW = container.offsetWidth || 3537;
+    const mapH = container.offsetHeight || 3750;
+    const vpW = viewport.offsetWidth || 1920;
+    const vpH = viewport.offsetHeight || 1080;
+    const zoom = Math.max(0.65, vttState.camera.zoom);
+    vttState.camera.zoom = zoom;
+    vttState.camera.x = (vpW / 2) - ((pin.x / 100) * mapW * zoom);
+    vttState.camera.y = (vpH / 2) - ((pin.y / 100) * mapH * zoom);
+    atualizarCamera(true);
+  }
+  mostrarToast(`Focando em "${pin.titulo}"`, 'aviso');
+}
+window.focarPinNoMapa = focarPinNoMapa;
+
+function projetarImagemPinDireto(url, titulo) {
+  if (!url) return;
+  socket.emit('tv_mostrar_handout', url);
+  atualizarUIHandoutVisivel(url);
+  mostrarToast(`Imagem "${titulo || 'Evidência'}" projetada na TV!`, 'sucesso');
+}
+window.projetarImagemPinDireto = projetarImagemPinDireto;
+
+window.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    if (imagemAtivaNaTV) {
+      fecharPistaNaTV();
+    } else if (pinFocadoVTT) {
+      fecharCardInspecaoVTT();
+    }
+  }
+});

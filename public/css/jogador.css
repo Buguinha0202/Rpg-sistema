@@ -249,3 +249,352 @@ body {
   animation: slideDown 0.3s ease forwards, fadeOut 0.3s ease 3.7s forwards;
 }
 @keyframes slideDown { from { transform: translateY(-100%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+
+/* ==========================================================================
+   ERGONOMIA MOBILE DA FICHA DO JOGADOR
+   ========================================================================== */
+
+/* Escondido no Desktop */
+#hud-fixo-mobile,
+#mobile-tabs-bar {
+  display: none !important;
+}
+
+@media (max-width: 860px) {
+  body {
+    padding-bottom: 72px;
+  }
+
+  .ficha-wrapper {
+    padding: 12px;
+    margin: 0;
+  }
+
+  /* HUD FIXO MOBILE */
+  #hud-fixo-mobile {
+    display: flex !important;
+    position: sticky;
+    top: 0;
+    z-index: 1000;
+    background: rgba(13, 13, 18, 0.95);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border-bottom: 1px solid #252536;
+    padding: 8px 12px;
+    margin: -12px -12px 12px -12px;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6);
+  }
+
+  .hud-mobile-agente {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+  }
+
+  .hud-mobile-avatar {
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    background-size: cover;
+    background-position: center;
+    background-color: #1a1a24;
+    border: 1.5px solid #9333ea;
+    flex-shrink: 0;
+  }
+
+  .hud-mobile-info {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+
+  .hud-mobile-nome {
+    font-size: 0.82rem;
+    font-weight: 800;
+    color: #fff;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 95px;
+  }
+
+  .hud-mobile-classe {
+    font-size: 0.65rem;
+    color: #a1a1aa;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 95px;
+  }
+
+  .hud-mobile-status {
+    display: flex;
+    gap: 5px;
+    align-items: center;
+  }
+
+  .hud-pilula {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    padding: 4px 6px;
+    border-radius: 4px;
+    font-size: 0.72rem;
+    font-weight: 800;
+    font-family: var(--font-mono);
+  }
+
+  .hud-rotulo {
+    font-size: 0.6rem;
+    opacity: 0.8;
+  }
+
+  .hud-pv {
+    background: rgba(220, 38, 38, 0.2);
+    border: 1px solid #ef4444;
+    color: #fca5a5;
+  }
+
+  .hud-san {
+    background: rgba(37, 99, 235, 0.2);
+    border: 1px solid #3b82f6;
+    color: #93c5fd;
+  }
+
+  .hud-pe {
+    background: rgba(217, 119, 6, 0.2);
+    border: 1px solid #f59e0b;
+    color: #fcd34d;
+  }
+
+  .btn-mod-rapido-mobile {
+    background: #1e1e2d;
+    border: 1px solid #9333ea;
+    color: #c084fc;
+    padding: 6px 8px;
+    border-radius: 6px;
+    font-size: 0.68rem;
+    font-weight: 900;
+    cursor: pointer;
+    min-width: 44px;
+    min-height: 36px;
+    text-align: center;
+    transition: all 0.2s ease;
+  }
+  .btn-mod-rapido-mobile.vantagem {
+    background: rgba(34, 197, 94, 0.2);
+    border-color: #22c55e;
+    color: #4ade80;
+  }
+  .btn-mod-rapido-mobile.desvantagem {
+    background: rgba(239, 68, 68, 0.2);
+    border-color: #ef4444;
+    color: #f87171;
+  }
+
+  /* BARRA DE NAVEGAÇÃO INFERIOR */
+  #mobile-tabs-bar {
+    display: flex !important;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 56px;
+    background: rgba(12, 12, 18, 0.98);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border-top: 1px solid #232334;
+    z-index: 1000;
+    box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.8);
+  }
+
+  .btn-mobile-tab {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: none;
+    color: #717182;
+    cursor: pointer;
+    padding: 4px 2px;
+    gap: 3px;
+    transition: all 0.2s ease;
+    min-height: 48px;
+  }
+
+  .btn-mobile-tab .tab-icone {
+    font-size: 1.15rem;
+    line-height: 1;
+  }
+
+  .btn-mobile-tab .tab-texto {
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+  }
+
+  .btn-mobile-tab.ativa {
+    color: #c084fc;
+    border-top: 2px solid #a855f7;
+    background: linear-gradient(180deg, rgba(168, 85, 247, 0.15) 0%, transparent 100%);
+  }
+
+  /* VISIBILIDADE DAS COLUNAS EM MOBILE CONFORME A ABA ATIVA */
+  .modo-mobile-atributos .coluna-tattica-esquerda {
+    display: flex !important;
+  }
+  .modo-mobile-atributos .coluna-conteudo-direita {
+    display: none !important;
+  }
+
+  .modo-mobile-painel-dir .coluna-tattica-esquerda {
+    display: none !important;
+  }
+  .modo-mobile-painel-dir .coluna-conteudo-direita {
+    display: flex !important;
+    flex-direction: column;
+  }
+  .modo-mobile-painel-dir .abas-navegacao-direita {
+    display: none !important;
+  }
+
+  /* BOTÕES DE PASSO COM TAMANHO ERGONÔMICO (44px+) */
+  .btn-step-cris {
+    min-width: 44px;
+    min-height: 44px;
+    font-size: 1.2rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .barra-valor-display {
+    font-size: 1.1rem;
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+}
+
+
+/* ==========================================================================
+   REFINAMENTO PREMIUM MOBILE & DESKTOP (CRIS RPG)
+   ========================================================================== */
+@media (max-width: 860px) {
+  /* Ocultar cabeçalho clássico repetitivo no mobile */
+  .ficha-header-cris {
+    display: none !important;
+  }
+
+  /* Ocultar modificadores repetitivos da coluna esquerda no mobile */
+  .coluna-tattica-esquerda .modificadores-rolagem {
+    display: none !important;
+  }
+
+  /* Espaçamento seguro na base */
+  .ficha-wrapper {
+    padding-bottom: 95px !important;
+  }
+
+  /* Tabela de Perícias Otimizada para Celular */
+  .tabela-pericias-cris {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0 4px;
+  }
+  .tabela-pericias-cris th:nth-child(4),
+  .tabela-pericias-cris th:nth-child(5),
+  .tabela-pericias-cris td:nth-child(4),
+  .tabela-pericias-cris td:nth-child(5) {
+    display: none !important;
+  }
+  .tabela-pericias-cris th {
+    font-size: 0.65rem;
+    padding: 8px 6px;
+    color: var(--text-muted);
+  }
+  .tabela-pericias-cris td {
+    padding: 12px 8px;
+    font-size: 0.88rem;
+    background: #14141e;
+    border-top: 1px solid #1f1f2e;
+    border-bottom: 1px solid #1f1f2e;
+  }
+  .tabela-pericias-cris tr td:first-child {
+    border-left: 1px solid #1f1f2e;
+    border-radius: 6px 0 0 6px;
+  }
+  .tabela-pericias-cris tr td:nth-child(3) {
+    border-right: 1px solid #1f1f2e;
+    border-radius: 0 6px 6px 0;
+  }
+  .pericia-nome-cell {
+    font-weight: 700;
+    font-size: 0.9rem;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .pericia-destaque {
+    font-family: var(--font-mono);
+    font-weight: 800;
+    color: #38bdf8;
+    text-align: center;
+  }
+  .btn-toggle-pericias {
+    width: 100%;
+    min-height: 44px;
+    font-size: 0.82rem;
+    font-weight: 800;
+    margin-top: 12px;
+    border-radius: 8px;
+    background: #1c1c28;
+    border: 1px solid #2e2e42;
+    color: #cbd5e1;
+  }
+
+  /* Subtabs de Inventário Touch */
+  .subtabs-inventario {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 12px;
+    overflow-x: auto;
+    padding-bottom: 4px;
+  }
+  .subtab-inv {
+    flex: 1;
+    min-height: 40px;
+    font-size: 0.78rem;
+    font-weight: 800;
+    white-space: nowrap;
+    border-radius: 6px;
+    padding: 8px 12px;
+  }
+
+  /* Cards de Itens & Armas no Mobile */
+  .item-card-cris {
+    background: #12121a;
+    border: 1px solid #222232;
+    border-radius: 8px;
+    padding: 12px;
+    margin-bottom: 8px;
+  }
+  .item-card-acoes {
+    display: flex;
+    gap: 8px;
+    margin-top: 8px;
+  }
+  .item-card-acoes button {
+    flex: 1;
+    min-height: 44px;
+    font-size: 0.82rem;
+    font-weight: 800;
+  }
+}

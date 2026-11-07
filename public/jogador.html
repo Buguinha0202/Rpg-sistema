@@ -20,6 +20,26 @@
   </div>
 
   <div class="ficha-wrapper">
+
+  <!-- HUD FIXO MOBILE (APENAS <= 860px) -->
+  <aside id="hud-fixo-mobile" class="hud-fixo-mobile">
+    <div class="hud-mobile-agente">
+      <div class="hud-mobile-avatar" id="hud-avatar"></div>
+      <div class="hud-mobile-info">
+        <span class="hud-mobile-nome" id="hud-nome">Agente</span>
+        <span class="hud-mobile-classe" id="hud-classe">Combatente</span>
+      </div>
+    </div>
+    <div class="hud-mobile-status">
+      <span class="hud-pilula hud-pv" id="hud-pilula-pv"><span class="hud-rotulo">PV</span> <b id="hud-pv-txt">0/0</b></span>
+      <span class="hud-pilula hud-san" id="hud-pilula-san"><span class="hud-rotulo">SAN</span> <b id="hud-san-txt">0/0</b></span>
+      <span class="hud-pilula hud-pe" id="hud-pilula-pe"><span class="hud-rotulo">PE</span> <b id="hud-pe-txt">0/0</b></span>
+    </div>
+    <button id="btn-mod-rapido-mobile" class="btn-mod-rapido-mobile" onclick="alternarModificadorRapidoMobile()" title="Alternar Normal / Vantagem / Desvantagem">
+      <span id="hud-mod-label">NORM</span>
+    </button>
+  </aside>
+
     <!-- CABEÇALHO -->
     <header class="ficha-header-cris">
       <!-- CAIXA DE AVATAR CLICÁVEL -->
@@ -156,6 +176,27 @@
       </section>
     </main>
   </div>
+
+  
+  <!-- BARRA DE NAVEGAÇÃO INFERIOR MOBILE (APENAS <= 860px) -->
+  <nav class="mobile-tabs-bar" id="mobile-tabs-bar">
+    <button class="btn-mobile-tab ativa" id="tab-mob-atributos" onclick="mudarAbaMobile('atributos', this)">
+      <span class="tab-icone">🔮</span>
+      <span class="tab-texto">Atributos</span>
+    </button>
+    <button class="btn-mobile-tab" id="tab-mob-pericias" onclick="mudarAbaMobile('pericias', this)">
+      <span class="tab-icone">🎯</span>
+      <span class="tab-texto">Perícias</span>
+    </button>
+    <button class="btn-mobile-tab" id="tab-mob-inventario" onclick="mudarAbaMobile('inventario', this)">
+      <span class="tab-icone">🗡️</span>
+      <span class="tab-texto">Armas/Itens</span>
+    </button>
+    <button class="btn-mobile-tab" id="tab-mob-habilidades" onclick="mudarAbaMobile('habilidades', this)">
+      <span class="tab-icone">⚡</span>
+      <span class="tab-texto">Poderes</span>
+    </button>
+  </nav>
 
   <!-- PALCO INVISÍVEL DOS DADOS -->
   <div id="dice-canvas"></div>

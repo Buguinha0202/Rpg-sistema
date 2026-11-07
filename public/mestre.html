@@ -85,11 +85,12 @@
         <div class="cockpit-nav-tabs">
           <button class="cockpit-tab ativa" onclick="mudarAbaCockpit('agentes')">AGENTES</button>
           <button class="cockpit-tab" onclick="mudarAbaCockpit('cenarios')">CENÁRIOS & CÔMODOS</button>
-          <button class="cockpit-tab" onclick="mudarAbaCockpit('ameacas')">DADOS DO MESTRE / AMEAÇAS</button>
+          <button class="cockpit-tab" onclick="mudarAbaCockpit('ameacas')">👾 BESTIÁRIO & AMEAÇAS</button>
         </div>
       </div>
       <div class="cockpit-topbar-actions">
         <button id="btn-recolher-pista" class="btn-fechar-pista" onclick="fecharPistaNoTablet()">✕ Ocultar Pista</button>
+        <button class="btn-cris-purple" onclick="transmitirCenaAtualCockpit()" style="font-weight: 700; background: #581c87; border: 1px solid #a855f7; color: #fff; cursor: pointer; padding: 6px 14px; border-radius: 6px; box-shadow: 0 0 10px rgba(168,85,247,0.3);">📺 Transmitir Cena na TV</button>
         <button class="btn-cris-subtle" onclick="acionarStandby()">⏹ Standby Mesa</button>
         <button class="btn-cris-subtle" onclick="abrirModoTabuleiro()">🗺 Tabuleiro</button>
         <button class="btn-cris-subtle" onclick="voltarParaHub()">← Sair</button>
@@ -97,7 +98,57 @@
     </div>
     <div class="cockpit-split-layout">
       <div class="coluna-resultados-feed">
-        <div class="feed-header-tag">Resultados</div>
+        <!-- ROLADOR TÁTICO DO MESTRE (INTEGRADO AO COCKPIT) -->
+        <div class="painel-rolador-cockpit">
+          <div class="rolador-cockpit-header">
+            <span>🎲 ROLAGEM DO MESTRE</span>
+            <span id="cockpit-rolagem-tipo-badge" class="badge-modo-rolagem">Normal</span>
+          </div>
+
+          <div class="rolador-cockpit-modificadores">
+            <button id="btn-cockpit-mod-normal" class="btn-mod-cockpit ativo" onclick="setModificadorCockpit('normal')">Normal</button>
+            <button id="btn-cockpit-mod-vantagem" class="btn-mod-cockpit" onclick="setModificadorCockpit('vantagem')">Vantagem</button>
+            <button id="btn-cockpit-mod-desvantagem" class="btn-mod-cockpit" onclick="setModificadorCockpit('desvantagem')">Desvant.</button>
+          </div>
+
+          <div class="rolador-cockpit-qtd-row">
+            <span style="font-size: 0.68rem; color: #717182; font-weight: 800;">QUANTIDADE:</span>
+            <div class="qtd-botoes-grupo">
+              <button class="btn-qtd-mini" onclick="alterarQtdDadosCockpit(-1)">−</button>
+              <span id="display-qtd-cockpit" class="display-qtd-val">1</span>
+              <button class="btn-qtd-mini" onclick="alterarQtdDadosCockpit(1)">+</button>
+            </div>
+          </div>
+
+          <div class="rolador-cockpit-grid-dados">
+            <button class="btn-dado-cockpit dado-d20" onclick="rolarDadoDoCockpit(20)" title="Rolar d20 (Atalho: D)">
+              <span class="dado-label">d20</span>
+            </button>
+            <button class="btn-dado-cockpit" onclick="rolarDadoDoCockpit(100)" title="Rolar d100">
+              <span class="dado-label">d100</span>
+            </button>
+            <button class="btn-dado-cockpit" onclick="rolarDadoDoCockpit(12)" title="Rolar d12">
+              <span class="dado-label">d12</span>
+            </button>
+            <button class="btn-dado-cockpit" onclick="rolarDadoDoCockpit(10)" title="Rolar d10">
+              <span class="dado-label">d10</span>
+            </button>
+            <button class="btn-dado-cockpit" onclick="rolarDadoDoCockpit(8)" title="Rolar d8">
+              <span class="dado-label">d8</span>
+            </button>
+            <button class="btn-dado-cockpit" onclick="rolarDadoDoCockpit(6)" title="Rolar d6">
+              <span class="dado-label">d6</span>
+            </button>
+            <button class="btn-dado-cockpit" onclick="rolarDadoDoCockpit(4)" title="Rolar d4">
+              <span class="dado-label">d4</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="feed-header-tag" style="border-top: 1px solid var(--border-subtle); display:flex; justify-content:space-between; align-items:center;">
+          <span>Feed de Combate & Testes</span>
+          <button class="btn-limpar-feed-mini" onclick="limparFeedRolagens()" title="Limpar histórico">Limpar</button>
+        </div>
         <div id="feed-rolagens-lista" class="lista-feed-scroll">
           <div class="feed-empty-aviso">Nenhuma rolagem recente na sessão.</div>
         </div>
@@ -105,7 +156,10 @@
       <div class="coluna-principal-conteudo">
         <div id="aba-cockpit-agentes" class="subview-cockpit ativa"><div id="grid-monitores-agentes" class="grid-monitores-cris"></div></div>
         <div id="aba-cockpit-cenarios" class="subview-cockpit">
-          <div class="secao-titulo-cenarios"><span>Cenários da Investigação:</span></div>
+          <div class="secao-titulo-cenarios" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+            <span style="font-size: 1.05rem; font-weight:800; color:#fff;">Cenários da Investigação:</span>
+            <button class="btn-cris-purple" onclick="abrirModalNovoCenarioCockpit()" style="font-size:0.75rem; padding:6px 12px;">+ Novo Cenário</button>
+          </div>
           <div class="carrossel-deck" id="deck-locais"></div>
           <div id="box-comodos-container" style="display:none; margin-top:18px;">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
@@ -119,51 +173,32 @@
           </div>
         </div>
         <div id="aba-cockpit-ameacas" class="subview-cockpit">
-          <div class="card-ameaca-detalhe" style="max-width: 100%; background: #13131a; border: 1px solid #22222e; border-radius: 8px; padding: 16px;">
-            
-            <!-- Cabeçalho do Monstro -->
-            <div style="display:flex; justify-content:space-between; align-items:center; border-bottom: 1px solid #22222e; padding-bottom: 12px; margin-bottom: 16px;">
-              <div>
-                <div id="nome-ameaca" style="font-size:1.4rem; font-weight:900; color:#ef4444; text-transform: uppercase; margin: 0;">Zumbi de Sangue</div>
-                <div style="font-size:0.8rem; color:#9494a8; margin-top: 4px;">Criatura - Sangue - VD 20</div>
-              </div>
-              <div style="text-align: right; background: #0a0a0d; padding: 8px 12px; border-radius: 6px; border: 1px solid #22222e;">
-                <div style="font-size: 0.7rem; color: #717182; font-weight: bold;">PONTOS DE VIDA</div>
-                <div style="font-size: 1.2rem; font-weight: bold; color: #fff;">40 <span style="font-size:0.8rem; color:#717182;">/ 40</span></div>
-              </div>
+          <!-- TOPBAR BESTIÁRIO -->
+          <div class="bestiario-topbar">
+            <div class="bestiario-filtros-elementos">
+              <button class="btn-filtro-elem ativo" onclick="filtrarBestiarioPorElemento('todos', this)">Todos</button>
+              <button class="btn-filtro-elem elem-sangue" onclick="filtrarBestiarioPorElemento('sangue', this)">🩸 Sangue</button>
+              <button class="btn-filtro-elem elem-morte" onclick="filtrarBestiarioPorElemento('morte', this)">⏳ Morte</button>
+              <button class="btn-filtro-elem elem-energia" onclick="filtrarBestiarioPorElemento('energia', this)">⚡ Energia</button>
+              <button class="btn-filtro-elem elem-conhecimento" onclick="filtrarBestiarioPorElemento('conhecimento', this)">📜 Conhecimento</button>
+              <button class="btn-filtro-elem elem-medo" onclick="filtrarBestiarioPorElemento('medo', this)">👁 Medo</button>
+            </div>
+            <div class="bestiario-busca-acoes">
+              <input type="text" id="input-busca-bestiario" class="input-bestiario-busca" placeholder="🔍 Buscar ameaça..." oninput="filtrarBestiarioPorTexto(this.value)">
+              <button class="btn-cris-destaque" onclick="abrirModalNovaAmeaca()" style="padding: 7px 14px; font-size: 0.75rem;">+ Nova Ameaça</button>
+            </div>
+          </div>
+
+          <!-- SPLIT LAYOUT DO BESTIÁRIO -->
+          <div class="bestiario-split-layout">
+            <!-- LISTA DE CARDS À ESQUERDA -->
+            <div class="bestiario-cards-coluna" id="lista-cards-bestiario">
+              <!-- Cards injetados via JS -->
             </div>
 
-            <div style="margin-bottom: 10px;">
-              <span style="font-size:0.75rem; color:#c19429; font-weight:bold; text-transform:uppercase;">Ataques (Clique para rolar)</span>
-            </div>
-
-            <!-- Lista de Ataques Clicáveis -->
-            <div id="lista-ataques" style="display: flex; flex-direction: column; gap: 10px;">
-              
-              <!-- Ataque 1: Garras -->
-              <button onclick="rolarAtaqueMonstro('Garras', 2, 5, '1d6+2 Sangue')" style="background: #181822; border: 1px solid #22222e; border-radius: 6px; padding: 12px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; transition: 0.2s; text-align: left; width: 100%;">
-                <div>
-                  <strong style="color: #fff; font-size: 1rem;">Garras <span style="font-size: 0.7rem; background: #374045; padding: 2px 6px; border-radius: 4px; margin-left: 6px;">Padrão</span></strong>
-                  <div style="font-size: 0.8rem; color: #9494a8; margin-top: 4px;">Corpo a Corpo</div>
-                </div>
-                <div style="text-align: right;">
-                  <div style="color: #38bdf8; font-weight: bold; font-size: 0.95rem;">Teste: 2d20+5</div>
-                  <div style="color: #ef4444; font-weight: bold; font-size: 0.85rem; margin-top: 2px;">Dano: 1d6+2</div>
-                </div>
-              </button>
-
-              <!-- Ataque 2: Mordida -->
-              <button onclick="rolarAtaqueMonstro('Mordida', 1, 5, '1d8+2 Sangue')" style="background: #181822; border: 1px solid #22222e; border-radius: 6px; padding: 12px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; transition: 0.2s; text-align: left; width: 100%;">
-                <div>
-                  <strong style="color: #fff; font-size: 1rem;">Mordida <span style="font-size: 0.7rem; background: #374045; padding: 2px 6px; border-radius: 4px; margin-left: 6px;">Livre</span></strong>
-                  <div style="font-size: 0.8rem; color: #9494a8; margin-top: 4px;">Corpo a Corpo (Apenas se agarrar)</div>
-                </div>
-                <div style="text-align: right;">
-                  <div style="color: #38bdf8; font-weight: bold; font-size: 0.95rem;">Teste: 1d20+5</div>
-                  <div style="color: #ef4444; font-weight: bold; font-size: 0.85rem; margin-top: 2px;">Dano: 1d8+2</div>
-                </div>
-              </button>
-
+            <!-- PAINEL DE DETALHE À DIREITA -->
+            <div class="bestiario-detalhe-coluna" id="painel-detalhe-ameaca">
+              <!-- Detalhe da criatura selecionada injetado via JS -->
             </div>
           </div>
         </div>
@@ -176,7 +211,7 @@
       <button class="btn-cris-subtle" onclick="mudarView('view-cockpit')">← Voltar ao Escudo</button>
       <div style="display:flex; gap:8px;">
         <button class="btn-cris-subtle" onclick="abrirModalEditarComodoAtual()">✏ Editar Cômodo</button>
-        <button id="btn-transmitir-comodo" class="btn-transmitir-live" onclick="transmitirComodoAtual()">▷ TRANSMITIR PRO TABLET</button>
+        <button id="btn-transmitir-comodo" class="btn-transmitir-live" onclick="transmitirComodoAtual()">📺 TRANSMITIR CENA (TV / TABLET)</button>
       </div>
     </div>
     <h3 id="detalhe-comodo-nome" style="font-size:1.2rem; font-weight:800; color:#fff; margin:14px 0 4px 0;"></h3>
@@ -191,8 +226,12 @@
         <strong id="pin-card-titulo" style="color:#eab308;"></strong>
         <button class="btn-fechar-modal" onclick="document.getElementById('detalhe-pin-card').style.display='none'">✕</button>
       </div>
-      <p id="pin-card-desc" style="font-size:0.82rem; color:#d4d4d8; margin-bottom:8px;"></p>
-      <button id="btn-exibir-handout-tablet" class="btn-cris-purple">Mostrar Pista no Tablet</button>
+      <img id="pin-card-img" style="width:100%; max-height:160px; object-fit:cover; border-radius:4px; margin-bottom:8px; display:none; border:1px solid #3f3f46;" />
+      <p id="pin-card-desc" style="font-size:0.82rem; color:#d4d4d8; margin-bottom:8px; max-height:150px; overflow-y:auto; line-height:1.35;"></p>
+      <div style="display:flex; gap:6px;">
+        <button id="btn-exibir-pin-tv" class="btn-cris-gold" style="flex:1; padding:6px 8px; font-size:0.75rem; display:none;">Projetar Imagem na TV</button>
+        <button id="btn-exibir-handout-tablet" class="btn-cris-purple" style="flex:1; padding:6px 8px; font-size:0.75rem;">Mostrar Pista no Tablet</button>
+      </div>
     </div>
   </div>
 
@@ -249,10 +288,7 @@
           <button class="btn-cris-purple" style="font-size:0.75rem; padding:4px 8px; margin-bottom:8px;" onclick="adicionarLinhaItemInventario()">+ Adicionar Item</button>
           <div id="lista-itens-inventario-modal" class="lista-itens-scroll"></div>
         </div>
-        <div class="inventario-builder-coluna">
-          <button class="btn-cris-purple" style="font-size:0.75rem; padding:4px 8px; margin-bottom:8px;" onclick="adicionarLinhaItemInventario()">+ Adicionar Item</button>
-          <div id="lista-itens-inventario-modal" class="lista-itens-scroll"></div>
-        </div>
+        
       </div>
       <button class="btn-cris-purple" style="width:100%; margin-top:14px; padding:10px;" onclick="salvarNovoPersonagemManual()">Registrar Agente na Campanha</button>
     </div>
@@ -287,7 +323,40 @@
         <canvas id="beta-draw-canvas" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 5;"></canvas>
         <canvas id="beta-fog-canvas" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 15; opacity: 0.65;"></canvas>
         <div id="beta-camada-tokens" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 10;"></div>
+        <div id="beta-camada-pins" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 25; pointer-events: auto;"></div>
         <canvas id="beta-ruler-canvas" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 35;"></canvas>
+      </div>
+    </div>
+
+    <!-- CARD FLUTUANTE DE INSPEÇÃO DE PONTO / EVIDÊNCIA NO VTT -->
+    <div id="vtt-pin-inspect-card" style="display: none; position: absolute; top: 4.8rem; right: 1.5rem; width: 340px; background: rgba(18, 18, 26, 0.96); border: 1px solid rgba(234, 179, 8, 0.35); border-radius: 12px; box-shadow: 0 16px 40px rgba(0, 0, 0, 0.85); backdrop-filter: blur(14px); z-index: 10005; overflow: hidden; font-family: 'Roboto Flex', sans-serif;">
+      <div style="background: linear-gradient(135deg, rgba(234, 179, 8, 0.15) 0%, rgba(20, 20, 30, 0.8) 100%); padding: 12px 14px; border-bottom: 1px solid rgba(255, 255, 255, 0.08); display: flex; align-items: center; justify-content: space-between;">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span id="vtt-pin-card-num" style="background: #eab308; color: #000; font-family: 'Roboto Mono', monospace; font-weight: 900; font-size: 0.75rem; padding: 2px 7px; border-radius: 4px;">01</span>
+          <strong id="vtt-pin-card-titulo" style="color: #fff; font-size: 0.9rem; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 220px;">Título do Ponto</strong>
+        </div>
+        <button onclick="fecharCardInspecaoVTT()" style="background: transparent; border: none; color: #9494a8; cursor: pointer; font-size: 1.1rem; padding: 2px 6px; line-height: 1;">✕</button>
+      </div>
+      
+      <div style="padding: 14px; display: flex; flex-direction: column; gap: 10px;">
+        <div id="vtt-pin-img-wrapper" style="position: relative; border-radius: 8px; overflow: hidden; border: 1px solid rgba(255, 255, 255, 0.12); max-height: 190px; background: #0a0a0f;">
+          <img id="vtt-pin-card-img" src="" alt="Detalhe do Ponto" style="width: 100%; height: 100%; max-height: 190px; object-fit: cover; display: block;">
+          <div style="position: absolute; bottom: 6px; right: 6px; background: rgba(0,0,0,0.7); font-size: 0.65rem; color: #d4d4d8; padding: 2px 6px; border-radius: 4px; pointer-events: none;">🔍 Evidência Oficial</div>
+        </div>
+
+        <div id="vtt-pin-card-desc" style="color: #d4d4d8; font-size: 0.82rem; line-height: 1.45; max-height: 130px; overflow-y: auto; padding-right: 4px;">
+          Descrição do ponto...
+        </div>
+
+        <div style="display: flex; gap: 8px; margin-top: 4px;">
+          <button id="btn-vtt-pin-projetar-tv" class="btn-cris-gold" style="flex: 1; padding: 8px 10px; font-size: 0.78rem; font-weight: 800; display: flex; align-items: center; justify-content: center; gap: 6px; border-radius: 6px;" onclick="projetarPinAtualTV()">
+            <span>📺</span> Projetar na TV
+          </button>
+          <button id="btn-vtt-pin-ocultar-tv" class="btn-cris-subtle" style="display: none; flex: 1; background: #dc2626; color: #fff; border-color: #ef4444; font-weight: 800; padding: 8px 10px; font-size: 0.78rem; align-items: center; justify-content: center; gap: 6px; border-radius: 6px; box-shadow: 0 0 10px rgba(220,38,38,0.5);" onclick="fecharPistaNaTV()">
+            <span>✕</span> Ocultar da TV
+          </button>
+          <button class="btn-cris-subtle" style="padding: 8px 12px; font-size: 0.78rem;" onclick="fecharCardInspecaoVTT()">Fechar</button>
+        </div>
       </div>
     </div>
 
@@ -295,21 +364,27 @@
 
     <div class="vtt-topbar-container">
       <div class="vtt-topbar-group">
-        <button class="vtt-top-btn" onclick="toggleSidebarEncounter()" title="Combat Encounter" style="padding: 0 10px;">
+        <button class="vtt-top-btn btn-voltar-vtt" onclick="fecharModoTabuleiro()" title="Fechar Tabuleiro e Voltar ao Cockpit" style="background: rgba(220, 38, 38, 0.2); border-color: #ef4444; color: #fca5a5; font-weight: bold; padding: 0 12px; gap: 6px;">
+          <span>←</span> Escudo
+        </button>
+        <button class="vtt-top-btn" onclick="toggleSidebarEncounter()" title="Rastreador de Combate (Iniciativa)" style="padding: 0 10px;">
           <svg viewBox="0 0 512 512"><path d="M224 80v352h224c8.8 0 16-7.2 16-16V96c0-8.8-7.2-16-16-16zM0 96c0-35.3 28.7-64 64-64h384c35.3 0 64 28.7 64 64v320c0 35.3-28.7 64-64 64H64c-35.3 0-64-28.7-64-64zm64 24c0 13.3 10.7 24 24 24h48c13.3 0 24-10.7 24-24s-10.7-24-24-24H88c-13.3 0-24 10.7-24 24m24 72c-13.3 0-24 10.7-24 24s10.7 24 24 24h48c13.3 0 24-10.7 24-24s-10.7-24-24-24zM64 312c0 13.3 10.7 24 24 24h48c13.3 0 24-10.7 24-24s-10.7-24-24-24H88c-13.3 0-24 10.7-24 24"></path></svg>
         </button>
         <div onclick="toggleTopDropdown('scenarios')" class="vtt-top-btn" style="min-width: 140px; justify-content: space-between;">
           <span id="nome-mapa-atual" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 160px;">Selecionar Mapa</span>
           <svg viewBox="0 0 448 512" style="width: 0.8rem; height: 0.8rem; color: var(--vtt-text-muted);"><path d="M241 337c-9.4 9.4-24.6 9.4-33.9 0L47 177c-9.4-9.4-9.4-24.6 0-33.9s24.6-9.4 33.9 0l143 143L367 143c9.4-9.4 24.6-9.4 33.9 0s9.4 24.6 0 33.9z"></path></svg>
         </div>
+        <button id="vtt-btn-recolher-pista" class="vtt-top-btn" onclick="fecharPistaNaTV()" title="Ocultar imagem da TV e restaurar visão do mapa" style="display:none; background: #dc2626; color: #ffffff; border-color: #ef4444; font-weight: 800; padding: 0 14px; gap: 6px; box-shadow: 0 0 14px rgba(220, 38, 38, 0.7); cursor: pointer;">
+          <span style="font-size: 1.1rem; line-height: 1;">✕</span> Ocultar Imagem da TV
+        </button>
       </div>
       <div class="vtt-topbar-group">
-        <button class="vtt-top-btn" onclick="toggleTopPopover('quickjot')" style="padding: 0 10px;" title="Add a journal entry">
+        <button class="vtt-top-btn" onclick="toggleTopPopover('quickjot')" style="padding: 0 10px;" title="Nova Anotação Rápida">
           <svg viewBox="0 0 18 18"><path d="M12.2225 7.43222C14.8608 7.43265 16.9996 9.57488 16.9998 12.2164C16.9997 14.858 14.8608 16.9992 12.2225 16.9996C9.58369 16.9996 7.44423 14.8583 7.44413 12.2164C7.44432 9.57461 9.58375 7.43222 12.2225 7.43222ZM10.7947 4.11093L12.8523 6.1705L13.1199 6.43808C12.8273 6.39287 12.5267 6.36974 12.2215 6.36972C8.99645 6.36995 6.38261 8.9875 6.38261 12.2164C6.38263 13.0112 6.54098 13.7688 6.82792 14.4596L6.2498 15.0396C5.91807 15.405 5.48569 15.6382 5.02128 15.8043L1.00663 16.9664C0.741321 17.0328 0.442992 16.9663 0.243938 16.7672C0.0117189 16.5679 -0.0547392 16.2692 0.0447196 15.9703L1.20585 11.984C1.33858 11.5189 1.60454 11.0867 1.93632 10.7213L8.53886 4.11093L9.30156 3.37948L9.66679 2.98105L10.7947 4.11093ZM13.8025 8.58652C13.6369 8.45584 13.4156 8.4708 13.2498 8.60116L9.71074 11.86C9.57278 11.9908 9.53146 12.1945 9.60038 12.3834C9.65567 12.558 9.82191 12.6744 10.0154 12.6744H11.5496L10.4851 15.2926C10.4022 15.4962 10.4716 15.7289 10.6375 15.8453C10.8033 15.9761 11.0244 15.9615 11.1902 15.8307L14.7283 12.5728C14.8661 12.442 14.9083 12.2382 14.8533 12.0494C14.7842 11.8751 14.6177 11.7586 14.4383 11.7584H12.8904L13.9549 9.13925C14.0372 8.93588 13.968 8.70276 13.8025 8.58652ZM12.0232 0.622649C12.8527 -0.207485 14.2124 -0.207614 15.0418 0.622649L16.3367 1.95175C17.1654 2.78215 17.1656 4.1107 16.3367 4.94101L15.8719 5.43905L15.1082 6.1705L14.7439 6.53573L13.615 5.43905L11.5584 3.34628L10.4305 2.25058L10.7947 1.85116L11.5584 1.1207L12.0232 0.622649Z"></path></svg>
         </button>
-        <button class="vtt-top-btn" onclick="abrirModalCampaignJournal()" title="Open Campaign Journal">Campaign Journal</button>
-        <button class="vtt-top-btn" onclick="abrirModalAtalhos()" title="Atalhos de Teclado">⌨️ Atalhos</button>
-        <button class="vtt-top-btn" onclick="toggleTopDropdown('rolltarget')" title="Roll Target">
+        <button class="vtt-top-btn" onclick="abrirModalCampaignJournal()" title="Abrir Diário da Campanha">📝 Diário</button>
+        <button class="vtt-top-btn" onclick="abrirModalAtalhos()" title="Atalhos do Tabuleiro">⌨️ Atalhos</button>
+        <button class="vtt-top-btn" onclick="toggleTopDropdown('rolltarget')" title="Destino da Rolagem">
           <svg viewBox="0 0 512 512"><path d="M217.5 56.4 77.9 140.2l61.4 44.7zM64 169.6v150.7l59.2-107.6zM104.8 388 240 469.1v-70.3zM272 469.1 407.2 388 272 398.8zm176-148.8V169.6l-59.2 43zm-13.9-180.1L294.5 56.4l78.2 128.4 61.4-44.7zM243.7 3.4c7.6-4.6 17.1-4.6 24.7 0l200 120c7.2 4.3 11.7 12.1 11.7 20.6v224c0 8.4-4.4 16.2-11.7 20.6l-200 120c-7.6 4.6-17.1 4.6-24.7 0l-200-120C36.4 384.2 32 376.4 32 368V144c0-8.4 4.4-16.2 11.7-20.6zm-18.4 362.1L145 239.4 81.9 354l143.3 11.5zM338.9 224H173.1L256 354.2zM256 54.8 172.5 192h167zm30.7 310.7L430.1 354 367 239.4z"></path></svg>
           <span id="vtt-roll-target-label">Self</span>
           <svg viewBox="0 0 448 512" style="width: 0.8rem; height: 0.8rem; color: var(--vtt-text-muted);"><path d="M241 337c-9.4 9.4-24.6 9.4-33.9 0L47 177c-9.4-9.4-9.4-24.6 0-33.9s24.6-9.4 33.9 0l143 143L367 143c9.4-9.4 24.6-9.4 33.9 0s9.4 24.6 0 33.9z"></path></svg>
@@ -322,7 +397,7 @@
       <div style="padding: 8px; border-bottom: 1px solid var(--vtt-border);">
         <button onclick="abrirModalMapBrowser()" style="width: 100%; background: #2563eb; color: #fff; border: none; padding: 8px 12px; border-radius: 4px; font-size: 0.85rem; font-weight: bold; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px;">
           <svg viewBox="0 0 448 512" style="width: 14px; height: 14px; fill: currentColor;"><path d="M248 72c0-13.3-10.7-24-24-24s-24 10.7-24 24v160H40c-13.3 0-24 10.7-24 24s10.7 24 24 24h160v160c0 13.3 10.7 24 24 24s24-10.7 24-24V280h160c13.3 0 24-10.7 24-24s-10.7-24-24-24H248z"></path></svg>
-          <span>Open Map Browser</span>
+          <span>Gerenciador de Mapas</span>
         </button>
       </div>
       <div id="top-scenarios-list" style="display: flex; flex-direction: column; max-height: 240px; overflow-y: auto;"></div>
@@ -342,11 +417,11 @@
 
     <div id="top-dropdown-rolltarget" class="vtt-dropdown-menu" style="top: 4.2rem; right: 5rem; min-width: 160px;">
       <div class="vtt-dropdown-item" onclick="selecionarRollTarget('Self')">
-        <span>Roll to Self</span>
+        <span>Apenas Mestre</span>
         <span id="target-check-Self" style="color: var(--vtt-gold); font-weight: bold;">✓</span>
       </div>
       <div class="vtt-dropdown-item" onclick="selecionarRollTarget('Everyone')">
-        <span>Roll to Everyone</span>
+        <span>Mestre e TV</span>
         <span id="target-check-Everyone" style="color: transparent; font-weight: bold;">✓</span>
       </div>
     </div>
@@ -354,29 +429,32 @@
     <!-- BARRA LATERAL ESQUERDA -->
     <div class="vtt-sidebar-tools">
       <section class="vtt-block">
-        <button class="vtt-btn active" onclick="ativarFerramenta(this, 'select')" title="Select Tool">
+        <button class="vtt-btn active" onclick="ativarFerramenta(this, 'select')" title="Cursor de Seleção (V)">
           <svg viewBox="0 0 320 512"><path d="M144 272h85.8L48 110.4v246.4l59.9-68.4C117 278 130.2 272 144 272M0 426V55.2C0 42.4 10.4 32 23.2 32c5.7 0 11.2 2.1 15.4 5.9l274 243.6c4.7 4.2 7.4 10.2 7.4 16.5 0 12.2-9.9 22.1-22.1 22.1H170.5l59.1 126.8c5.6 12 .4 26.3-11.6 31.9s-26.3.4-31.9-11.6l-59.4-127.5-88.1 100.8c-4.2 4.8-10.2 7.5-16.6 7.5-12.2 0-22-9.9-22-22"></path></svg>
         </button>
-        <button class="vtt-btn" onclick="ativarFerramenta(this, 'pan')" title="Pan Tool">
+        <button class="vtt-btn" onclick="ativarFerramenta(this, 'pan')" title="Mover Tabuleiro (H)">
           <svg viewBox="0 0 512 512"><path d="M256 0c-25.3 0-47.2 14.7-57.6 36-7-2.6-14.5-4-22.4-4-35.3 0-64 28.7-64 64v165.5l-2.7-2.7c-25-25-65.5-25-90.5 0s-25 65.5 0 90.5l87.7 87.7c48 48 113.1 75 181 75H304c1.5 0 3-.1 4.5-.4 91.7-6.2 165-79.4 171.1-171.1.3-1.5.4-3 .4-4.5V160c0-35.3-28.7-64-64-64-5.5 0-10.9.7-16 2v-2c0-35.3-28.7-64-64-64-7.9 0-15.4 1.4-22.4 4C303.2 14.7 281.3 0 256 0m-16 96.1V64c0-8.8 7.2-16 16-16s16 7.2 16 16v168c0 13.3 10.7 24 24 24s24-10.7 24-24V95.9c0-8.8 7.2-16 16-16s16 7.2 16 16v136c0 13.3 10.7 24 24 24s24-10.7 24-24V160c0-8.8 7.2-16 16-16s16 7.2 16 16v172.9c-.1.6-.1 1.3-.2 1.9-3.4 69.7-59.3 125.6-129 129-.6 0-1.3.1-1.9.2h-13.4c-55.2 0-108.1-21.9-147.1-60.9l-87.7-87.8c-6.2-6.2-6.2-16.4 0-22.6s16.4-6.2 22.6 0l43.7 43.7c6.9 6.9 17.2 8.9 26.2 5.2s14.8-12.5 14.8-22.2V96c0-8.8 7.2-16 16-16s16 7.1 16 15.9V232c0 13.3 10.7 24 24 24s24-10.7 24-24z"></path></svg>
         </button>
       </section>
 
       <section class="vtt-block">
-        <button class="vtt-btn" onclick="ativarFerramenta(this, 'fog')" title="Fog Tool">
+        <button class="vtt-btn" onclick="ativarFerramenta(this, 'fog')" title="Névoa de Guerra (F)">
           <svg viewBox="0 0 640 512"><path d="M410.8 134.2c-19.3 8.6-42 3.5-55.9-12.5C332.8 96.1 300.3 80 264 80c-66.3 0-120 53.7-120 120v.2c0 20.4-12.8 38.5-32 45.3-37.4 13.2-64 48.8-64 90.5 0 53 43 96 96 96h363.3c.6-.1 1.3-.1 1.9-.2 46.2-2.7 82.8-41 82.8-87.8 0-36-21.6-67.1-52.8-80.7-20.1-8.8-31.6-30-28.1-51.7q.9-5.7.9-11.7c0-39.8-32.2-72-72-72-10.5 0-20.4 2.2-29.2 6.2zM512 479.8v.2H144C64.5 480 0 415.5 0 336c0-62.7 40.1-116 96-135.8v-.2c0-92.8 75.2-168 168-168 50.9 0 96.4 22.6 127.3 58.3C406.2 83.7 422.6 80 440 80c66.3 0 120 53.7 120 120 0 6.6-.5 13-1.5 19.3 48 21 81.5 68.9 81.5 124.7 0 72.4-56.6 131.6-128 135.8"></path></svg>
         </button>
-        <button class="vtt-btn" onclick="ativarFerramenta(this, 'draw')" title="Draw Tool">
+        <button class="vtt-btn" onclick="ativarFerramenta(this, 'draw')" title="Pincel de Desenho (D)">
           <svg viewBox="0 0 512 512"><path d="M441.2 59.1 453.1 71c9.4 9.4 9.4 24.6 0 33.9L432 126.1l-45.7-45.7 20.8-21.1c9.4-9.5 24.6-9.5 34.1-.1zM231.9 236.8l120.7-122.3 45.5 45.5-121.5 121.6c-3.3 3.3-7.5 5.6-12 6.5L215 298.5l10.4-49.7c.9-4.5 3.2-8.7 6.4-11.9zM373 25.5 197.7 203.1c-9.7 9.8-16.4 22.3-19.2 35.8l-18 85.7c-1.7 7.9.8 16.2 6.5 21.9s14 8.2 21.9 6.5l85.5-17.9c13.7-2.9 26.3-9.7 36.1-19.6l176.6-176.6c28.1-28.1 28.1-73.7 0-101.8l-12-11.9C446.9-3.1 401-2.9 373 25.5m-48.3-7.9C302.9 11.4 279.8 8 256 8 119 8 8 119 8 256s111 248 248 248c13.3 0 24-10.7 24-24s-10.7-24-24-24c-110.5 0-200-89.5-200-200S145.5 56 256 56c9.7 0 19.3.7 28.7 2zm129.4 210.8c1.2 9 1.9 18.2 1.9 27.6 0 57.4-46.6 104-104 104-13.3 0-24 10.7-24 24s10.7 24 24 24c83.9 0 152-68.1 152-152 0-23.6-3.3-46.4-9.4-68l-40.4 40.5z"></path></svg>
         </button>
-        <button class="vtt-btn" onclick="ativarFerramenta(this, 'ruler')" title="Ruler Tool">
+        <button class="vtt-btn" onclick="ativarFerramenta(this, 'ruler')" title="Régua de Medição (R)">
           <svg viewBox="0 0 512 512"><path d="M63.2 379.3c-6.2-6.2-6.2-16.4 0-22.6l39.4-39.4 30.1 30.1c6.2 6.2 16.4 6.2 22.6 0s6.2-16.4 0-22.6l-30.1-30.1 41.4-41.4 30.1 30.1c6.2 6.2 16.4 6.2 22.6 0s6.2-16.4 0-22.6l-30.1-30.1 41.4-41.4 30.1 30.1c6.2 6.2 16.4 6.2 22.6 0s6.2-16.4 0-22.6l-30.1-30.1 39.4-39.4c6.2-6.2 16.4-6.2 22.6 0l69.5 69.5c6.2 6.2 6.2 16.4 0 22.6L155.3 448.8c-6.2 6.2-16.4 6.2-22.6 0zm35.5 103.4c25 25 65.5 25 90.5 0l293.5-293.4c25-25 25-65.5 0-90.5l-69.4-69.5c-25-25-65.5-25-90.5 0L29.3 322.7c-25 25-25 65.5 0 90.5l69.5 69.5z"></path></svg>
         </button>
-        <button class="vtt-btn" onclick="ativarFerramenta(this, 'pings')" title="Point & Ping">
+        <button class="vtt-btn" onclick="ativarFerramenta(this, 'pings')" title="Ponto de Atenção (P)">
           <svg viewBox="0 0 512 512"><path d="M256 0c13.3 0 24 10.7 24 24v41.5c86.8 10.8 155.7 79.7 166.5 166.5H488c13.3 0 24 10.7 24 24s-10.7 24-24 24h-41.5c-10.8 86.8-79.7 155.7-166.5 166.5V488c0 13.3-10.7 24-24 24s-24-10.7-24-24v-41.5C145.2 435.7 76.3 366.8 65.5 280H24c-13.3 0-24-10.7-24-24s10.7-24 24-24h41.5C76.3 145.2 145.2 76.3 232 65.5V24c0-13.3 10.7-24 24-24M112 256a144 144 0 1 0 288 0 144 144 0 1 0-288 0m192 0a48 48 0 1 0-96 0 48 48 0 1 0 96 0m-144 0a96 96 0 1 1 192 0 96 96 0 1 1-192 0"></path></svg>
         </button>
-        <button class="vtt-btn" onclick="toggleGaveta('token')" title="Open Token Browser">
+        <button class="vtt-btn" onclick="toggleGaveta('token')" title="Catálogo de Miniaturas (T)">
           <svg viewBox="0 0 512 512"><path d="M406.5 399.6c-19.1-46.7-65-79.6-118.5-79.6h-64c-53.5 0-99.4 32.9-118.5 79.6C69.9 362.2 48 311.7 48 256c0-114.9 93.1-208 208-208s208 93.1 208 208c0 55.7-21.9 106.2-57.5 143.6m-40.1 32.7c-32 20.1-69.8 31.7-110.4 31.7s-78.4-11.6-110.5-31.7c7.3-36.7 39.7-64.3 78.5-64.3h64c38.8 0 71.2 27.6 78.5 64.3zM256 512a256 256 0 1 0 0-512 256 256 0 1 0 0 512m0-272a40 40 0 1 1 0-80 40 40 0 1 1 0 80m-88-40a88 88 0 1 0 176 0 88 88 0 1 0-176 0"></path></svg>
+        </button>
+        <button class="vtt-btn active" id="btn-toggle-vtt-pins" onclick="togglePinsNoVTT(this)" title="Exibir/Ocultar Pins de Evidência (I)" style="color: #eab308;">
+          <svg viewBox="0 0 384 512" style="width: 1.1rem; height: 1.1rem;"><path fill="currentColor" d="M384 192c0 87.4-117 243-168.3 307.2-12.3 15.3-35.1 15.3-47.4 0C117 435 0 279.4 0 192 0 86 86 0 192 0s192 86 192 192zM192 256a64 64 0 1 0 0-128 64 64 0 1 0 0 128z"></path></svg>
         </button>
       </section>
     </div>
@@ -447,10 +525,11 @@
       <div style="display: flex; padding: 0 20px; border-bottom: 1px solid var(--vtt-border); gap: 20px;">
         <button onclick="mudarAbaCatalogo('jogadores')" id="tab-cat-jogadores" style="background: transparent; color: var(--vtt-text-main); border: none; border-bottom: 2px solid var(--vtt-active-red); padding: 12px 0; cursor: pointer; font-weight: bold; font-size: 0.9rem;">Players</button>
         <button onclick="mudarAbaCatalogo('monstros')" id="tab-cat-monstros" style="background: transparent; color: var(--vtt-text-muted); border: none; border-bottom: 2px solid transparent; padding: 12px 0; cursor: pointer; font-size: 0.9rem;">Monsters</button>
+        <button onclick="mudarAbaCatalogo('evidencias')" id="tab-cat-evidencias" style="background: transparent; color: var(--vtt-text-muted); border: none; border-bottom: 2px solid transparent; padding: 12px 0; cursor: pointer; font-size: 0.9rem; font-weight: bold;">🔍 Evidências</button>
       </div>
       <div style="padding: 15px 20px 5px 20px;">
         <div style="position: relative; display: flex; align-items: center;">
-          <input type="text" placeholder="Search Tokens" style="width: 100%; background: var(--vtt-bg-box); color: var(--vtt-text-main); border: 1px solid var(--vtt-border); padding: 10px 12px; border-radius: 4px; outline: none;">
+          <input type="text" placeholder="Buscar miniaturas..." style="width: 100%; background: var(--vtt-bg-box); color: var(--vtt-text-main); border: 1px solid var(--vtt-border); padding: 10px 12px; border-radius: 4px; outline: none;">
           <span style="position: absolute; right: 10px; color: var(--vtt-text-muted);">🔍</span>
         </div>
       </div>
@@ -639,6 +718,9 @@
         <span style="font-size: 0.7rem; color: var(--vtt-text-muted); font-weight: bold; margin-left: 6px;">GRID:</span>
         <input type="number" id="vtt-grid-size-input" value="70" onchange="atualizarTamanhoGrid(this.value)" style="width: 40px; background: transparent; border: none; color: #fff; font-size: 0.8rem; text-align: center; font-weight: bold; outline: none;">
         <span style="font-size: 0.7rem; color: var(--vtt-text-muted); margin-right: 6px;">px</span>
+        <button class="vtt-btn-sm" id="btn-snap-grid" onclick="toggleSnapToGrid()" title="Snap to Grid (Ímã)" style="border-left: 1px solid var(--vtt-border); margin-left: 2px;">
+          <svg viewBox="0 0 448 512"><path d="M400 32H48C21.5 32 0 53.5 0 80v352c0 26.5 21.5 48 48 48h352c26.5 0 48-21.5 48-48V80c0-26.5-21.5-48-48-48zm-16 352H64V96h320v288zM160 160h128v128H160z"></path></svg>
+        </button>
       </section>
 
       <section class="vtt-block vtt-row">
@@ -776,33 +858,99 @@
     </div>
   </div>
 <!-- CAIXA DE SELEÇÃO (MARQUEE) -->
-  <div id="vtt-marquee-box" style="display: none; position: absolute; border: 1px solid #38bdf8; background: rgba(56, 189, 248, 0.2); pointer-events: none; z-index: 9999;"></div>
+  <div id="vtt-marquee-box" style="display: none; position: fixed; border: 1px solid #38bdf8; background: rgba(56, 189, 248, 0.2); pointer-events: none; z-index: 999999;"></div>
 
-  <!-- MENU CONJUNTO (MULTI-SELEÇÃO) INSPIRADO NO BEYOND -->
-  <div id="multi-token-toolbar" style="display: none; position: fixed; z-index: 99999; background: rgba(15, 15, 20, 0.95); border: 1px solid var(--vtt-gold, #c19429); border-radius: 8px; box-shadow: 0 8px 32px rgba(0,0,0,0.8); padding: 8px 12px; backdrop-filter: blur(8px); transform: translate(-50%, -120%); flex-direction: column; gap: 8px; font-family: 'Inter', sans-serif;">
-    <div style="font-size: 0.8rem; font-weight: 800; color: #fff; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 6px; text-align: center;">
-      <span id="multi-token-count" style="color: var(--vtt-gold);">2</span> Tokens Selecionados
-    </div>
-    <div style="display: flex; gap: 6px;">
-      <button onclick="multiAcaoTokens('add')" title="Add ao Combate" style="background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); color: #d4d4d8; padding: 6px 10px; border-radius: 6px; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 0.65rem;">
-        <span style="font-size: 1rem;">⚔️</span><span>Add</span>
-      </button>
-      <button onclick="multiAcaoTokens('hide')" title="Ocultar/Revelar" style="background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); color: #d4d4d8; padding: 6px 10px; border-radius: 6px; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 0.65rem;">
-        <span style="font-size: 1rem;">👁️</span><span>Hide</span>
-      </button>
-      <button onclick="multiAcaoTokens('size')" title="Tamanho" style="background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); color: #d4d4d8; padding: 6px 10px; border-radius: 6px; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 0.65rem;">
-        <span style="font-size: 1rem;">➕</span><span>Size</span>
-      </button>
-      <button onclick="multiAcaoTokens('delete')" title="Excluir" style="background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); color: #f87171; padding: 6px 10px; border-radius: 6px; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 0.65rem;">
-        <span style="font-size: 1rem;">🗑️</span><span>Del</span>
-      </button>
-      <section class="vtt-block vtt-row">
-        <button class="vtt-btn-sm" id="btn-snap-grid" onclick="toggleSnapToGrid()" title="Snap to Grid (Ímã)">
-          <svg viewBox="0 0 448 512"><path d="M400 32H48C21.5 32 0 53.5 0 80v352c0 26.5 21.5 48 48 48h352c26.5 0 48-21.5 48-48V80c0-26.5-21.5-48-48-48zm-16 352H64V96h320v288zM160 160h128v128H160z"></path></svg>
-        </button>
-      </section>
+  <!-- MODAL NOVA / EDITAR AMEAÇA -->
+  <div id="modal-nova-ameaca" class="modal-overlay" style="display: none;">
+    <div class="modal-card-cris" style="max-width: 650px; max-height: 90vh; overflow-y: auto;">
+      <div class="modal-header-cris">
+        <h3 id="modal-ameaca-titulo">Nova Ameaça Paranormal</h3>
+        <button class="btn-fechar-modal" onclick="fecharModalNovaAmeaca()">✕</button>
+      </div>
+      <div class="modal-body-cris">
+        <input type="hidden" id="form-ameaca-id" value="">
+        <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 12px; margin-bottom: 12px;">
+          <div>
+            <label class="form-label-cris">NOME DA AMEAÇA</label>
+            <input type="text" id="form-ameaca-nome" class="form-input-cris" placeholder="Ex: Zumbi de Sangue Bestial">
+          </div>
+          <div>
+            <label class="form-label-cris">VD (VALOR DESAFIO)</label>
+            <input type="number" id="form-ameaca-vd" class="form-input-cris" value="20" placeholder="20">
+          </div>
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+          <div>
+            <label class="form-label-cris">ELEMENTO</label>
+            <select id="form-ameaca-elemento" class="form-input-cris" style="cursor: pointer;">
+              <option value="sangue">🩸 Sangue</option>
+              <option value="morte">⏳ Morte</option>
+              <option value="energia">⚡ Energia</option>
+              <option value="conhecimento">📜 Conhecimento</option>
+              <option value="medo">👁 Medo</option>
+            </select>
+          </div>
+          <div>
+            <label class="form-label-cris">PV MÁXIMO</label>
+            <input type="number" id="form-ameaca-pv" class="form-input-cris" value="40" placeholder="40">
+          </div>
+          <div>
+            <label class="form-label-cris">DEFESA</label>
+            <input type="number" id="form-ameaca-defesa" class="form-input-cris" value="15" placeholder="15">
+          </div>
+        </div>
+        <div style="margin-bottom: 12px;">
+          <label class="form-label-cris">URL DA IMAGEM / TOKEN (OPCIONAL)</label>
+          <input type="text" id="form-ameaca-img" class="form-input-cris" placeholder="https://exemplo.com/monstro.png">
+        </div>
+        <div style="margin-bottom: 12px;">
+          <label class="form-label-cris">DESCRIÇÃO & RESUMO TÁTICO</label>
+          <textarea id="form-ameaca-desc" class="form-input-cris" rows="2" placeholder="Comportamento, origem ou tática da criatura..."></textarea>
+        </div>
+
+        <!-- CONSTRUTOR DE ATAQUES -->
+        <div style="margin-top: 16px; border-top: 1px solid #22222e; padding-top: 14px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+            <label class="form-label-cris" style="margin: 0; color: #ef4444;">⚔️ ATAQUES & AÇÕES</label>
+            <button type="button" class="btn-cris-subtle" onclick="adicionarLinhaAtaqueForm()" style="font-size: 0.72rem; padding: 4px 10px;">+ Adicionar Ataque</button>
+          </div>
+          <div id="container-linhas-ataques-form" style="display: flex; flex-direction: column; gap: 8px;">
+            <!-- Linhas dinâmicas de ataques -->
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer-cris" style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px;">
+        <button class="btn-cris-subtle" onclick="fecharModalNovaAmeaca()">Cancelar</button>
+        <button class="btn-cris-destaque" onclick="salvarFormAmeaca()">Salvar Ameaça</button>
+      </div>
     </div>
   </div>
+
+
+  <!-- MODAL NOVO CENÁRIO DO COCKPIT -->
+  <div id="modal-novo-cenario-cockpit" class="modal-overlay" style="display: none;">
+    <div class="modal-card-cris" style="max-width: 480px;">
+      <div class="modal-header-cris">
+        <h3>Novo Cenário da Investigação</h3>
+        <button class="btn-fechar-modal" onclick="fecharModalNovoCenarioCockpit()">✕</button>
+      </div>
+      <div class="modal-body-cris">
+        <div style="margin-bottom: 12px;">
+          <label class="form-label-cris">NOME DO LOCAL / CENÁRIO</label>
+          <input type="text" id="form-cenario-cockpit-nome" class="form-input-cris" placeholder="Ex: Mansão dos Nevoeiros">
+        </div>
+        <div style="margin-bottom: 12px;">
+          <label class="form-label-cris">URL DA IMAGEM DO MAPA / LOCAL (OPCIONAL)</label>
+          <input type="text" id="form-cenario-cockpit-img" class="form-input-cris" placeholder="https://exemplo.com/mapa.jpg">
+        </div>
+      </div>
+      <div class="modal-footer-cris" style="display:flex; justify-content:flex-end; gap:8px;">
+        <button class="btn-cris-subtle" onclick="fecharModalNovoCenarioCockpit()">Cancelar</button>
+        <button class="btn-cris-destaque" onclick="salvarFormNovoCenarioCockpit()">Adicionar Cenário</button>
+      </div>
+    </div>
+  </div>
+
 </body>
 </html>
 

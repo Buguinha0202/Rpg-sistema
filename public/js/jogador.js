@@ -34,6 +34,22 @@ window.setModificadorJogador = function(mod) {
     ativo.style.color = '#fff';
     ativo.style.borderColor = corAtiva;
   }
+
+  // Sincroniza botão rápido do HUD Mobile
+  const btnMob = document.getElementById('btn-mod-rapido-mobile');
+  const labelMob = document.getElementById('hud-mod-label');
+  if (btnMob && labelMob) {
+    btnMob.classList.remove('vantagem', 'desvantagem');
+    if (mod === 'vantagem') {
+      btnMob.classList.add('vantagem');
+      labelMob.innerText = 'VANT';
+    } else if (mod === 'desvantagem') {
+      btnMob.classList.add('desvantagem');
+      labelMob.innerText = 'DESV';
+    } else {
+      labelMob.innerText = 'NORM';
+    }
+  }
 };
 
 // Tabela Oficial Completa
@@ -155,9 +171,24 @@ function carregarFichaAgente(agente) {
 }
 
 function atualizarDisplaysStatus() {
-  document.getElementById('display-pv').innerText = `${agenteAtual.pv} / ${agenteAtual.pvMax || agenteAtual.pv}`;
-  document.getElementById('display-san').innerText = `${agenteAtual.san} / ${agenteAtual.sanMax || agenteAtual.san}`;
-  document.getElementById('display-pe').innerText = `${agenteAtual.pe} / ${agenteAtual.peMax || agenteAtual.pe}`;
+  const pvStr = `${agenteAtual.pv} / ${agenteAtual.pvMax || agenteAtual.pv}`;
+  const sanStr = `${agenteAtual.san} / ${agenteAtual.sanMax || agenteAtual.san}`;
+  const peStr = `${agenteAtual.pe} / ${agenteAtual.peMax || agenteAtual.pe}`;
+
+  const dispPv = document.getElementById('display-pv');
+  const dispSan = document.getElementById('display-san');
+  const dispPe = document.getElementById('display-pe');
+  if (dispPv) dispPv.innerText = pvStr;
+  if (dispSan) dispSan.innerText = sanStr;
+  if (dispPe) dispPe.innerText = peStr;
+
+  // Sincroniza com HUD Fixo Mobile
+  const hudPv = document.getElementById('hud-pv-txt');
+  const hudSan = document.getElementById('hud-san-txt');
+  const hudPe = document.getElementById('hud-pe-txt');
+  if (hudPv) hudPv.innerText = pvStr;
+  if (hudSan) hudSan.innerText = sanStr;
+  if (hudPe) hudPe.innerText = peStr;
 }
 
 function alterarStatus(tipo, delta) {
@@ -555,32 +586,107 @@ function mostrarToastDano(mensagem) {
 
 // 2. Escuta o servidor avisando que a ficha mudou
 socket.on('alerta_status_agente_atualizado', ({ campanhaId, personagem }) => {
-  // Verifica se a atualização é para o personagem que este jogador está usando
-  if (typeof agenteAtual !== 'undefined' && agenteAtual && agenteAtual.id === personagem.id) {
-    
-    // Calcula se tomou dano
-    const danoTomado = agenteAtual.pv - personagem.pv;
-    const curado = personagem.pv - agenteAtual.pv;
+  if (typeof agenteAtual !== 'undefined' && agenteAtual && (agenteAtual.id === personagem.id || agenteAtual.nome === personagem.nome)) {
+    const danoTomado = (agenteAtual.pv || 0) - (personagem.pv || 0);
+    const curado = (personagem.pv || 0) - (agenteAtual.pv || 0);
+    const sanPerdida = (agenteAtual.san || 0) - (personagem.san || 0);
 
-    // Atualiza a variável local
-    agenteAtual = personagem;
-    
-    // Atualiza o HTML da barra de vida (ajuste os IDs conforme o seu jogador.js atualiza a tela)
-    const displayPv = document.getElementById('display-pv');
-    if (displayPv) displayPv.innerText = `${agenteAtual.pv} / ${agenteAtual.pvMax || agenteAtual.pv}`;
+    agenteAtual = { ...agenteAtual, ...personagem };
+    if (typeof atualizarDisplaysStatus === 'function') {
+      atualizarDisplaysStatus();
+    }
 
-    // Se tomou dano, pisca a tela e mostra o aviso!
     if (danoTomado > 0) {
       mostrarToastDano(`VOCÊ SOFREU ${danoTomado} DE DANO!`);
-      
       const overlay = document.getElementById('overlay-dano');
       if (overlay) {
         overlay.classList.remove('piscar-dano');
-        void overlay.offsetWidth; // Força o reflow para reiniciar a animação
+        void overlay.offsetWidth;
         overlay.classList.add('piscar-dano');
       }
     } else if (curado > 0) {
       mostrarToastDano(`Você recuperou ${curado} PV!`);
+    } else if (sanPerdida > 0) {
+      mostrarToastDano(`Você perdeu ${sanPerdida} de Sanidade!`);
     }
   }
 });
+
+
+// =========================================================================
+// ERGONOMIA MOBILE DA FICHA DO JOGADOR
+// =========================================================================
+
+function alternarModificadorRapidoMobile() {
+  const atual = window.modificadorDadoJogador || 'normal';
+  let proximo = 'normal';
+  if (atual === 'normal') proximo = 'vantagem';
+  else if (atual === 'vantagem') proximo = 'desvantagem';
+  else proximo = 'normal';
+
+  window.setModificadorJogador(proximo);
+  const toastTxt = proximo === 'vantagem' ? 'Modificador: VANTAGEM (+1d20)' : (proximo === 'desvantagem' ? 'Modificador: DESVANTAGEM' : 'Modificador: NORMAL');
+  mostrarToastJogador(toastTxt);
+}
+window.alternarModificadorRapidoMobile = alternarModificadorRapidoMobile;
+
+function mudarAbaMobile(aba, btn) {
+  const wrapper = document.querySelector('.ficha-wrapper');
+  if (!wrapper) return;
+
+  document.querySelectorAll('.btn-mobile-tab').forEach(b => b.classList.remove('ativa'));
+  if (btn) btn.classList.add('ativa');
+
+  if (aba === 'atributos') {
+    wrapper.classList.remove('modo-mobile-painel-dir');
+    wrapper.classList.add('modo-mobile-atributos');
+  } else {
+    wrapper.classList.remove('modo-mobile-atributos');
+    wrapper.classList.add('modo-mobile-painel-dir');
+    mudarAbaDireita(aba);
+  }
+
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+window.mudarAbaMobile = mudarAbaMobile;
+
+// Hook no carregarFichaAgente para sincronizar dados do HUD mobile
+const _originalCarregarFichaAgente = carregarFichaAgente;
+carregarFichaAgente = function(agente) {
+  _originalCarregarFichaAgente(agente);
+
+  const wrapper = document.querySelector('.ficha-wrapper');
+  if (wrapper) {
+    wrapper.classList.remove('modo-mobile-painel-dir');
+    wrapper.classList.add('modo-mobile-atributos');
+  }
+
+  const hudNome = document.getElementById('hud-nome');
+  const hudClasse = document.getElementById('hud-classe');
+  const hudAvatar = document.getElementById('hud-avatar');
+  if (hudNome) hudNome.innerText = agente.nome || 'Agente';
+  if (hudClasse) hudClasse.innerText = agente.classe || 'Agente';
+  if (hudAvatar) {
+    const avatarImg = agente.avatar || agente.img || '';
+    if (avatarImg) {
+      hudAvatar.style.backgroundImage = `url('${avatarImg}')`;
+    } else {
+      hudAvatar.style.backgroundImage = 'none';
+      hudAvatar.innerText = (agente.nome || 'A').charAt(0).toUpperCase();
+      hudAvatar.style.display = 'flex';
+      hudAvatar.style.alignItems = 'center';
+      hudAvatar.style.justifyContent = 'center';
+      hudAvatar.style.fontWeight = 'bold';
+      hudAvatar.style.color = '#fff';
+    }
+  }
+
+  // Reset do botão rápido
+  window.setModificadorJogador('normal');
+};
+
+function fecharModalDado() {
+  const modal = document.getElementById('modal-dado');
+  if (modal) modal.style.display = 'none';
+}
+window.fecharModalDado = fecharModalDado;
